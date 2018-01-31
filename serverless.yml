@@ -1,0 +1,104 @@
+service: kinesis-leaderboard
+
+frameworkVersion: ">=1.8.0 <2.0.0"
+
+provider:
+  name: aws
+  runtime: nodejs6.10
+  versionFunctions: false
+  environment: ${self:custom.config.environment.common}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:BatchWriteItem
+        - dynamodb:DeleteItem
+      Resource:
+        - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.leaderboardTable.baseTable}*
+
+plugins:
+  - serverless-plugin-typescript
+
+custom:
+  config: ${file(./config/${opt:stage}.yml):config}
+  kinesis:
+    streams:
+      scoreStream: ${self:service}-${opt:stage}-scoreStream
+  dynamodb:
+    tables:
+      leaderboardTable:
+        baseTable: ${self:service}-${opt:stage}-leaderboardTable
+        gsi:
+          scoresByDatedScoreBlock: ${self:service}-${opt:stage}-leaderboardTable-scoresByDatedScoreBlock
+
+functions:
+  # Methods
+  inputFunction:
+    handler: src/test-fn.handler
+
+  scoreStreamHandle:
+    handler: src/stream-handler.handler
+    environment:
+      LEADERBOARD_TABLE: ${self:custom.config.dynamodb.tables.leaderboardTable.baseTable}    
+    events:
+      - stream:
+          type: kinesis
+          batchSize: 10
+          startingPosition: LATEST          
+          arn:
+            Fn::GetAtt:
+              - ScoreStream
+              - Arn
+
+resources:
+  Resources:
+    scoreStream:
+      Type: "AWS::Kinesis::Stream"
+      Properties: 
+        Name: ${self:custom.kinesis.streams.scoreStream}
+        RetentionPeriodHours: 24
+        ShardCount: 1
+
+    # Updating score requires
+    # - 1 Write/Read to base table (conditionals may make this just 1 write)
+    # - 2 Writes to index
+    leaderboardTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S # eg. <uuid>
+          - AttributeName: datedScore
+            AttributeType: S # eg. month_2017/09
+          - AttributeName: datedScoreBlock
+            AttributeType: S # eg. month_2017/09_1
+          - AttributeName: score
+            AttributeType: N # eg. 10
+        KeySchema:
+          # Allows us to fetch a scores by a specific userId
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: datedScore
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+        GlobalSecondaryIndexes:
+          # Allows us to lookup top scores in a block
+          - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
+            KeySchema:
+             - AttributeName: datedScoreBlock
+               KeyType: HASH
+             - AttributeName: score
+               KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 5
+              WriteCapacityUnits: 5
