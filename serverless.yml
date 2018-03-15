@@ -6,7 +6,6 @@ provider:
   name: aws
   runtime: nodejs6.10
   versionFunctions: false
-  environment: ${self:custom.config.environment.common}
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -23,8 +22,27 @@ provider:
 plugins:
   - serverless-plugin-typescript
 
+package:
+  include:
+    - src/
+  exclude:
+    - config/**
+    - .envrc
+    - .gitignore
+    - package.json
+    - yarn.lock
+    - src/yarn.lock
+    - src/package.json
+    - README.md
+    - .eslintrc.yml
+    - tests/**
+    - coverage/**
+    - "*.sh"
+    - "**/*.test.js"
+    - npm-packages-offline-cache/**
+    - src/__mocks__/**
+
 custom:
-  config: ${file(./config/${opt:stage}.yml):config}
   kinesis:
     streams:
       scoreStream: ${self:service}-${opt:stage}-scoreStream
@@ -41,9 +59,10 @@ functions:
     handler: src/test-fn.handler
 
   scoreStreamHandle:
-    handler: src/stream-handler.handler
+    handler: src/score-stream-handler.handler
+    timeout: 300
     environment:
-      LEADERBOARD_TABLE: ${self:custom.config.dynamodb.tables.leaderboardTable.baseTable}    
+      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
     events:
       - stream:
           type: kinesis
@@ -51,7 +70,7 @@ functions:
           startingPosition: LATEST          
           arn:
             Fn::GetAtt:
-              - ScoreStream
+              - scoreStream
               - Arn
 
 resources:
