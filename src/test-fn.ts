@@ -6,8 +6,8 @@ import * as BbPromise from 'bluebird';
 
 const kinesis = new AWS.Kinesis();
 
-const noRecords = 100
-const noRecordSets = 100
+const noRecords = 3
+const noRecordSets = 500
 
 const randomNumber = max =>
     Math.floor(Math.random() * max);
@@ -26,6 +26,8 @@ const generateRecord = index => {
 };
 
 const putRecords = async () => {
+    await BbPromise.delay(10 * 1000);
+
     const records = _.times(noRecords, generateRecord);
 
     const putRecords = {
@@ -46,7 +48,7 @@ export const handler = async (event, context, cb) => {
     await BbPromise.map(
         _.times(noRecordSets),
         putRecords,
-        { concurrency: 5 },
+        { concurrency: 1 },
     );
 
     cb(undefined, { message: 'In Message returned of Lambda'});

@@ -47,7 +47,7 @@ export const updateScore = async (userId: string, timeInterval: TimeInterval, da
     };
 
     const putParams = {
-        TableName: process.env.LEADERBOARD_TABLE,  
+        TableName: process.env.LEADERBOARD_TABLE as string,  
         Item: newRecord,
     };
 
