@@ -18,42 +18,7 @@ import {
     getDatedScoreBlockByScore
 } from '../util';
 
-import * as leaderRepository from '../repository/leaderboard';
-
-export const updateScore = async (userId: string, date: Date, scoreFacets: ScoreFacetTuple[], amountToUpdate: number) => {
-    const timeIntervals = [
-        // TimeInterval.SECOND,
-        // TimeInterval.MINUTE,
-        TimeInterval.HOUR,
-        TimeInterval.DAY,
-        TimeInterval.WEEK,
-        TimeInterval.MONTH,
-        TimeInterval.YEAR,
-        TimeInterval.ALL_TIME,
-    ];
-
-    const scoresWithFacets = scoreFacets.map(
-        ([ scoreFacet, scoreFacetData]) => timeIntervals.map(timeInterval => 
-            ({ scoreFacet, scoreFacetData, timeInterval })
-        )
-    );
-    
-    const flattenedScoresWithFacets = _.flatten(scoresWithFacets);
-
-    const scoreIncrementPromises = _.map(
-        flattenedScoresWithFacets,
-        ({ scoreFacet, scoreFacetData, timeInterval }) => leaderRepository.updateScore(
-            userId,
-            timeInterval,
-            date,
-            scoreFacet,
-            scoreFacetData,
-            amountToUpdate
-        )
-    );
-
-    return BbPromise.all(scoreIncrementPromises);
-}
+import * as readLeaderRepository from '../repository/read-leaderboard';
 
 export const getTop = async (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, topN: number) => {
     const datedScore = getDatedScore(
@@ -72,7 +37,7 @@ export const getTop = async (intervalType: TimeInterval, date: Date, scoreFacet:
 
     for (var i = topScoreBlock; (i >= 0) && (scores.length < topN); --i)
     {    
-        scores = scores.concat(await leaderRepository.getScoresInScoreBlock(
+        scores = scores.concat(await readLeaderRepository.getScoresInScoreBlock(
             getDatedScoreBlockByBoxIndex(
                 intervalType,
                 date,

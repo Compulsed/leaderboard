@@ -4,12 +4,21 @@ import { Context, Callback } from 'aws-lambda';
 import * as BbPromise from 'bluebird';
 import * as _ from 'lodash';
 
-import { ScoreFacet, ScoreFacetTuple } from './leaderboards/model';
-import * as leaderboardService from './leaderboards/services/leaderboard';
+import { ScoreFacet, ScoreFacetTuple, TimeInterval } from './leaderboards/model';
+import { updateScore } from './leaderboards/services/write-leaderboard';
 
 // Defines out many sets of score record writes can be in flight at one time
 //  scoreRecordWritesInFlight = (No. TimeIntervals) * (No. Facets) * (recordConcurrencyLevel)
 const recordConcurrencyLevel = 1;
+
+const timeIntervals = [
+    TimeInterval.HOUR,
+    TimeInterval.DAY,
+    TimeInterval.WEEK,
+    TimeInterval.MONTH,
+    TimeInterval.YEAR,
+    TimeInterval.ALL_TIME,
+];
 
 interface ScoreRecord {
     userId: string
@@ -19,30 +28,21 @@ interface ScoreRecord {
 }
 
 const processRecord = async (scoreRecord: ScoreRecord) => {
-    try {
-        const facets:ScoreFacetTuple[] = [
-            [ScoreFacet.ALL, undefined]
-        ];
+    const facets:ScoreFacetTuple[] = [
+        [ScoreFacet.ALL, undefined]
+    ];
 
-        if (scoreRecord.location) {
-            facets.push([ScoreFacet.LOCATION, scoreRecord.location]);
-        }
-
-        if (scoreRecord.organisationId) {
-            facets.push([ScoreFacet.ORGANISATION, scoreRecord.organisationId])
-        }
-
-        await leaderboardService.updateScore(
-            scoreRecord.userId,
-            new Date(),
-            facets,
-            scoreRecord.score
-        );
-    } catch (err) {
-        console.error(err, err.stack);
+    if (scoreRecord.location) {
+        facets.push([ScoreFacet.LOCATION, scoreRecord.location]);
     }
 
-    return scoreRecord;
+    if (scoreRecord.organisationId) {
+        facets.push([ScoreFacet.ORGANISATION, scoreRecord.organisationId])
+    }
+
+    const updatedScore = await updateScore(scoreRecord.userId, new Date(), timeIntervals, facets, scoreRecord.score);
+
+    return updatedScore;
 }
 
 const aggregateScores = (records: ScoreRecord[]) =>
@@ -60,20 +60,6 @@ const formatKinesisRecords = (kinesisRecords) => {
         .map(_.property('data'));
 }
 
-/*
-    Batch Size: Defined in Lambda Function
-    Write Calculation:
-        -> TimeIntervals * Facets * Records 
-    
-    TimeIntervals: (Second <-> All Time)    = 8
-    Facets: { All, Organisation, Location } = 3
-    Number of records (BatchSize)           = 10
-        -> 8 * 3 * 10
-        -> 240
-
-    5 WCU
-        -> 48 seconds. max per batch
-*/
 export const handler = async (event: any, context: Context, cb: Callback) => {
     console.log('event', JSON.stringify({ event }, null, 2));
 

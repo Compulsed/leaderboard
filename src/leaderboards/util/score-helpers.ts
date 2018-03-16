@@ -26,7 +26,7 @@ export const getDatedScore = (intervalType: TimeInterval, date: Date, scoreFacet
     const prefix: { [scoreFacet: string]: (msc: any) => string } = {
         [ScoreFacet.ALL]: () => 'all',
         [ScoreFacet.LOCATION]: location => 'loc-' + location,
-        [ScoreFacet.ORGANISATION]: organisationId => 'org-' + organisationId,
+        [ScoreFacet.ORGANISATION]: organisationId => 'org-' + organisationId,        
     };
 
     return `${prefix[scoreFacet](scoreFacetsData)}_${intervalType}_${getDate[intervalType]()}`;
