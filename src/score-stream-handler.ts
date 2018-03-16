@@ -5,11 +5,11 @@ import * as BbPromise from 'bluebird';
 import * as _ from 'lodash';
 
 import { ScoreFacet, ScoreFacetTuple, TimeInterval } from './leaderboards/model';
-import { updateScore } from './leaderboards/services/write-leaderboard';
+import { getScoreUpdates } from './leaderboards/services/write-leaderboard';
 
-// Defines out many sets of score record writes can be in flight at one time
-//  scoreRecordWritesInFlight = (No. TimeIntervals) * (No. Facets) * (recordConcurrencyLevel)
-const recordConcurrencyLevel = 1;
+// Defines the amount of update tasks that can be running at one time,
+//  an update task involves (1 Read & 1 Write)
+const recordConcurrencyLevel = 10;
 
 const timeIntervals = [
     TimeInterval.HOUR,
@@ -27,7 +27,7 @@ interface ScoreRecord {
     location?: string
 }
 
-const processRecord = async (scoreRecord: ScoreRecord) => {
+const processRecord = (scoreRecord: ScoreRecord) => {
     const facets:ScoreFacetTuple[] = [
         [ScoreFacet.ALL, undefined]
     ];
@@ -40,9 +40,15 @@ const processRecord = async (scoreRecord: ScoreRecord) => {
         facets.push([ScoreFacet.ORGANISATION, scoreRecord.organisationId])
     }
 
-    const updatedScore = await updateScore(scoreRecord.userId, new Date(), timeIntervals, facets, scoreRecord.score);
+    const scoreUpdates = getScoreUpdates(
+        scoreRecord.userId,
+        new Date(),
+        timeIntervals,
+        facets,
+        scoreRecord.score
+    );
 
-    return updatedScore;
+    return scoreUpdates;
 }
 
 const aggregateScores = (records: ScoreRecord[]) =>
@@ -72,9 +78,14 @@ export const handler = async (event: any, context: Context, cb: Callback) => {
 
         console.log(JSON.stringify({ aggregatedScores }, null, 2));
 
+        const scoreUpates = _(aggregatedScores)
+            .map(processRecord)
+            .flatten()
+            .value();
+        
         const processedRecords = await BbPromise.map(
-            aggregatedScores,
-            processRecord,
+            scoreUpates,
+            scoreUpdate => scoreUpdate(),
             { concurrency: recordConcurrencyLevel }
         );
 

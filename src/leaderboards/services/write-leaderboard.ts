@@ -13,9 +13,7 @@ import {
 
 import * as writeLeaderRepository from '../repository/write-leaderboard';
 
-const scoreWriteConcurrency = 8;
-
-export const updateScore = async (userId: string, date: Date, timeIntervals: TimeInterval[], scoreFacets: ScoreFacetTuple[], amountToUpdate: number) => {
+export const getScoreUpdates = (userId: string, date: Date, timeIntervals: TimeInterval[], scoreFacets: ScoreFacetTuple[], amountToUpdate: number) => {
     // TimeIntervals * ScoreFacets
     const scoresWithFacets = scoreFacets.map(
         ([ scoreFacet, scoreFacetData]) => timeIntervals.map(timeInterval => 
@@ -25,18 +23,19 @@ export const updateScore = async (userId: string, date: Date, timeIntervals: Tim
     
     const flattenedScoresWithFacets = _.flatten(scoresWithFacets);
 
-    const updatedScores = await BbPromise.map(
-        flattenedScoresWithFacets,
-        ({ scoreFacet, scoreFacetData, timeInterval }) => writeLeaderRepository.updateScore(
+    // Promises immediate execute, adding an extra annon function allows us to lazily
+    //  evaluate. This allows the caller to control how many update tasks are concurrently run
+    const scoreUpdates = flattenedScoresWithFacets.map(
+        ({ scoreFacet, scoreFacetData, timeInterval }) => () => 
+        writeLeaderRepository.updateScore(
             userId,
             timeInterval,
             date,
             scoreFacet,
             scoreFacetData,
             amountToUpdate
-        ),
-        { concurrency: scoreWriteConcurrency } 
+        )
     );
 
-    return updatedScores;
-}
+    return scoreUpdates;
+};

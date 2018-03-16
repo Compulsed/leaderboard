@@ -51,7 +51,7 @@ export const updateScore = async (userId: string, timeInterval: TimeInterval, da
         Item: newRecord,
     };
 
-    const updatedRow = await promiseRetry(async (retry, number) => {
+    await promiseRetry(async (retry, number) => {
         return docClient.put(putParams).promise().catch(err => {
             if (err.code === 'ProvisionedThroughputExceededException') {                
                 retry(err);
@@ -61,5 +61,5 @@ export const updateScore = async (userId: string, timeInterval: TimeInterval, da
         });
     }, promiseRetryOptions);
 
-    return updatedRow;
+    return newRecord;
 };
