@@ -24,7 +24,7 @@ const promiseRetryOptions = {
 };
 
 export const updateScore = async (userId: string, timeInterval: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string, scoreIncrement: number) => {
-    const datedScore = getDatedScore(timeInterval, date, scoreFacet, scoreFacetsData, tag);
+    const datedScore = getDatedScore(timeInterval, date, scoreFacet, scoreFacetsData);
 
     // Reads the score so the value can be incremented
     const record = await getUserScore(userId, datedScore);

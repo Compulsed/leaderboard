@@ -4,7 +4,7 @@ import { Context, Callback } from 'aws-lambda';
 import * as BbPromise from 'bluebird';
 import * as _ from 'lodash';
 
-import { NO_TAG_VALUE, ScoreFacet, ScoreFacetTuple, TimeInterval } from './leaderboards/model';
+import { ScoreFacet, ScoreFacetTuple, TimeInterval } from './leaderboards/model';
 import { getScoreUpdates } from './leaderboards/services/write-leaderboard';
 
 // Defines the amount of update tasks that can be running at one time,
@@ -20,12 +20,17 @@ const timeIntervals = [
     TimeInterval.ALL_TIME,
 ];
 
+const tags = [
+    'NONE',
+    'csa',
+    'ec2',
+];
+
 interface ScoreRecord {
     userId: string
     score: number
     organisationId?: string
     location?: string
-    tags?: string[]
 }
 
 const processRecord = (scoreRecord: ScoreRecord) => {
@@ -40,8 +45,6 @@ const processRecord = (scoreRecord: ScoreRecord) => {
     if (scoreRecord.organisationId) {
         facets.push([ScoreFacet.ORGANISATION, scoreRecord.organisationId])
     }
-
-    const tags = [NO_TAG_VALUE].concat(scoreRecord.tags || []);
 
     const scoreUpdates = getScoreUpdates(
         scoreRecord.userId,
@@ -70,10 +73,9 @@ const formatKinesisRecords = (kinesisRecords) => {
         .map(_.property('data'));
 }
 
-// Total Batch Duration
-//  -> ((Tags) * (Facets) * (TimeIntervals) * (Batch Size) / MIN(RCU, WCU))
-//  -> ((3 * 2 * 6 * 10) / 5)
-//  -> 72 seconds
+// Total Writes + Reads
+//  (Tags) * (Facets) * (TimeIntervals) * (Number of Records)
+//  3 * 2 * 6 * 10
 export const handler = async (event: any, context: Context, cb: Callback) => {
     console.log('event', JSON.stringify({ event }, null, 2));
 

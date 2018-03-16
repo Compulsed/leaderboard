@@ -15,12 +15,7 @@ const randomNumber = max =>
 const generateRecord = index => {
     const key = String(randomNumber(5));
 
-    const data = {
-        userId: key,
-        score: 1, organisationId: 'test-org',
-        location: 'test-loc',
-        tags: ['aws', 'ec2']
-    };
+    const data = { userId: key, score: 1, organisationId: 'test-org', location: 'test-loc' };      
 
     const record = {
         PartitionKey: key,
