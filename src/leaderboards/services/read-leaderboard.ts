@@ -30,7 +30,7 @@ export const getTop = async (intervalType: TimeInterval, date: Date, scoreFacet:
     );
 
     // TODO: Generate based off of function
-    const topScore = 1000;
+    const topScore = 1 * 1000 * 1000;
 
     const topScoreBlock = getScoreBlockFromScore(topScore);
 

@@ -13,9 +13,15 @@ const randomNumber = max =>
     Math.floor(Math.random() * max);
 
 const generateRecord = index => {
-    const key = String(randomNumber(5));
+    const key = String(randomNumber(50));
 
-    const data = { userId: key, score: 1, organisationId: 'test-org', location: 'test-loc' };      
+    const data = {
+        userId: key,
+        score: 1,
+        organisationId: 'test-org',
+        location: 'test-loc',
+        tags: ['aws', 'ec2']
+    };
 
     const record = {
         PartitionKey: key,
@@ -26,7 +32,7 @@ const generateRecord = index => {
 };
 
 const putRecords = async () => {
-    await BbPromise.delay(10 * 1000);
+    await BbPromise.delay(3000);
 
     const records = _.times(noRecords, generateRecord);
 

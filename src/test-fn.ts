@@ -6,18 +6,19 @@ import * as BbPromise from 'bluebird';
 
 const kinesis = new AWS.Kinesis();
 
-const noRecords = 3
-const noRecordSets = 500
+const noRecords = 20
+const noRecordSets = 100
 
 const randomNumber = max =>
     Math.floor(Math.random() * max);
 
 const generateRecord = index => {
-    const key = String(randomNumber(5));
+    const key = String(randomNumber(50));
 
     const data = {
         userId: key,
-        score: 1, organisationId: 'test-org',
+        score: 1,
+        organisationId: 'test-org',
         location: 'test-loc',
         tags: ['aws', 'ec2']
     };
@@ -31,7 +32,7 @@ const generateRecord = index => {
 };
 
 const putRecords = async () => {
-    await BbPromise.delay(10 * 1000);
+    await BbPromise.delay(100);
 
     const records = _.times(noRecords, generateRecord);
 

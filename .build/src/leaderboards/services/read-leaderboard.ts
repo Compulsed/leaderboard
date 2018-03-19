@@ -20,16 +20,17 @@ import {
 
 import * as readLeaderRepository from '../repository/read-leaderboard';
 
-export const getTop = async (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, topN: number) => {
+export const getTop = async (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string, topN: number) => {
     const datedScore = getDatedScore(
         intervalType,
         date,
         scoreFacet,
-        scoreFacetsData
+        scoreFacetsData,
+        tag
     );
 
     // TODO: Generate based off of function
-    const topScore = 1000;
+    const topScore = 1 * 1000 * 1000;
 
     const topScoreBlock = getScoreBlockFromScore(topScore);
 
@@ -43,6 +44,7 @@ export const getTop = async (intervalType: TimeInterval, date: Date, scoreFacet:
                 date,
                 scoreFacet, 
                 scoreFacetsData,
+                tag,
                 i
             )
         ));

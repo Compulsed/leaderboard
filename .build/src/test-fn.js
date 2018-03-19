@@ -41,14 +41,20 @@ var AWS = require("aws-sdk");
 var _ = require("lodash");
 var BbPromise = require("bluebird");
 var kinesis = new AWS.Kinesis();
-var noRecords = 3;
-var noRecordSets = 500;
+var noRecords = 20;
+var noRecordSets = 100;
 var randomNumber = function (max) {
     return Math.floor(Math.random() * max);
 };
 var generateRecord = function (index) {
-    var key = String(randomNumber(5));
-    var data = { userId: key, score: 1, organisationId: 'test-org', location: 'test-loc' };
+    var key = String(randomNumber(50));
+    var data = {
+        userId: key,
+        score: 1,
+        organisationId: 'test-org',
+        location: 'test-loc',
+        tags: ['aws', 'ec2']
+    };
     var record = {
         PartitionKey: key,
         Data: JSON.stringify({ data: data }),
@@ -59,7 +65,7 @@ var putRecords = function () { return __awaiter(_this, void 0, void 0, function 
     var records, putRecords, kinesisResult;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4 /*yield*/, BbPromise.delay(10 * 1000)];
+            case 0: return [4 /*yield*/, BbPromise.delay(100)];
             case 1:
                 _a.sent();
                 records = _.times(noRecords, generateRecord);

@@ -24,10 +24,18 @@ const promiseRetryOptions = {
 };
 
 export const updateScore = async (userId: string, timeInterval: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string, scoreIncrement: number) => {
-    const datedScore = getDatedScore(timeInterval, date, scoreFacet, scoreFacetsData);
+    const datedScore = getDatedScore(timeInterval, date, scoreFacet, scoreFacetsData, tag);
 
     // Reads the score so the value can be incremented
-    const record = await getUserScore(userId, datedScore);
+    const record = await promiseRetry(async (retry, number) => {
+        return getUserScore(userId, datedScore).catch(err => {
+            if (err.code === 'ProvisionedThroughputExceededException') {                
+                retry(err);
+            }
+
+            throw err;
+        });
+    }, promiseRetryOptions);
 
     const score = (record && record.score) || 0;
 

@@ -73,6 +73,18 @@ functions:
               - scoreStream
               - Arn
 
+  getLeaderboard:
+    handler: src/get-leaderboard.handler
+    environment:
+      SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
+      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}    
+    events:
+      - http:
+          path: leaderboard
+          method: get
+          cors: true
+
+
 resources:
   Resources:
     scoreStream:

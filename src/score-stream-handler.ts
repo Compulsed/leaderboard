@@ -99,6 +99,12 @@ export const handler = async (event: any, context: Context, cb: Callback) => {
 
         console.log(JSON.stringify({ processedRecords }, null, 2));
 
+        console.log(JSON.stringify({
+            fomattedRecords: formattedRecords.length,
+            scoreAggregationCount: aggregatedScores.length,
+            scoresWritten: processedRecords.length,
+        }, null, 2));
+
         return cb(undefined, { message: 'Success' });
     } catch (err) {
         return console.error(err.message, err.stack) || cb(err);
