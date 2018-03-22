@@ -4,8 +4,9 @@ import * as uuid from 'uuid/v4';
 import * as BbPromise from 'bluebird';
 
 // Model
-import { TimeInterval, LeaderboardRecord, ScoreFacet, ScoreFacetData, ScoreFacetTuple, NO_TAG_VALUE } from '../model';
+import { TimeInterval, LeaderboardRecord } from '../model';
 import { ScoreUpdateRecord } from '../repository/write-leaderboard';
+import { SearchFacets, PartialSearchFacets, FACET_VALUE, OPTIONAL_FACET } from '../util';
 
 // Functions
 import { updateScore } from '../repository/write-leaderboard';
@@ -16,7 +17,7 @@ export interface InputScoreRecord {
     date: Date
     score: number
     organisationId?: string
-    location?: string
+    locations?: string[]
     tags?: string[]
 }
 
@@ -38,49 +39,38 @@ interface NormalisedScoreRecord {
     score: number
     date: Date,
     timeIntervals: TimeInterval[]
-    scoreFacets: ScoreFacetTuple[]
-    tags: string[]
+    organisationId: OPTIONAL_FACET,
+    locations: FACET_VALUE[],
+    tags: FACET_VALUE[],
 }
 
 const normaliseRecord = (scoreRecord: InputScoreRecord, intervals: TimeInterval[]) => {
-    const facets: ScoreFacetTuple[] = [
-        [ScoreFacet.ALL, undefined]
-    ];
-
-    if (scoreRecord.location) {
-        facets.push([ScoreFacet.LOCATION, scoreRecord.location]);
-    }
-
-    if (scoreRecord.organisationId) {
-        facets.push([ScoreFacet.ORGANISATION, scoreRecord.organisationId])
-    }
-
-    const tags = [NO_TAG_VALUE].concat(scoreRecord.tags || []);
-
     const normalisedScoreRecord: NormalisedScoreRecord = {
         userId: scoreRecord.userId,
         score: scoreRecord.score,
         date: scoreRecord.date,
         timeIntervals: intervals,
-        scoreFacets: facets,
-        tags: tags,
+        organisationId: scoreRecord.organisationId || null,
+        tags: scoreRecord.tags || [],
+        locations: scoreRecord.locations || [],
     };
 
     return normalisedScoreRecord;
 }
 
 const explodeScores = (normalisedRecord: NormalisedScoreRecord) => {
-    const { userId, date, timeIntervals, scoreFacets, tags, score } = normalisedRecord;
-    
+    const { userId, date, timeIntervals, organisationId, locations, tags, score } = normalisedRecord;
+
+
+
     const scoreUpdateRecords =  _(timeIntervals)
         .map(timeInterval => ({ timeInterval }))
-        .flatMap(collection => scoreFacets.map(scoreFacet => Object.assign({}, collection, { scoreFacet })))
-        .flatMap(collection => tags.map(tag => Object.assign({}, collection, { tag })))
+        .flatMap(searchFacets => locations.map(location => _.assign({}, searchFacets, { location })))
+        .flatMap(searchFacets => tags.map(tag => _.assign({}, searchFacets, { tag })))
+        .flatMap(searchFacets => [searchFacets].concat(_.assign({}, searchFacets, { oranisationId: organisationId })))
         .value();
 
-    const userScoreUpdateRecords: ScoreUpdateRecord[]  = _(scoreUpdateRecords)
-        .map(collection => Object.assign({}, collection, { userId, score, date }))
-        .value();
+    const userScoreUpdateRecords: ScoreUpdateRecord;
 
     return userScoreUpdateRecords;
 }

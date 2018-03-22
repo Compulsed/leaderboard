@@ -3,16 +3,12 @@ import * as BbPromise from 'bluebird';
 import * as _ from 'lodash';
 import * as promiseRetry from 'promise-retry';
 
-import { 
-    LeaderboardRecord,
-    TimeInterval,
-    ScoreFacet,
-    ScoreFacetData,
-    ScoreFacetTuple
-} from '../model';
+// Model
+import { LeaderboardRecord, TimeInterval } from '../model';
+import { PartialSearchFacets } from '../util';
 
+// Functions
 import { getDatedScore, getDatedScoreBlockByScore } from '../util';
-
 import { getUserScore } from './read-leaderboard';
 
 const docClient = new AWS.DynamoDB.DocumentClient();
@@ -29,21 +25,13 @@ export interface ScoreUpdateRecord {
     score: number
     date: Date
     timeInterval: TimeInterval
-    scoreFacet: ScoreFacetTuple
-    tag: string
+    facets: PartialSearchFacets
 }
 
 export const updateScore = async (scoreUpdateRecord: ScoreUpdateRecord) => {
-    const {
-        userId,
-        score,
-        date,
-        timeInterval,
-        scoreFacet: [scoreFacetType, scoreFacetData],
-        tag,
-    } = scoreUpdateRecord;
+    const { userId, score, date, timeInterval, facets } = scoreUpdateRecord;
 
-    const datedScore = getDatedScore(timeInterval, date, scoreFacetType, scoreFacetData, tag);
+    const datedScore = getDatedScore(timeInterval, date, facets);
 
     // Reads the score so the value can be incremented
     const record = await promiseRetry(async (retry, number) => {
@@ -64,14 +52,7 @@ export const updateScore = async (scoreUpdateRecord: ScoreUpdateRecord) => {
         userId,
         score: newScore,
         datedScore, 
-        datedScoreBlock: getDatedScoreBlockByScore(
-            timeInterval,
-            date,
-            scoreFacetType,
-            scoreFacetData,
-            tag,
-            newScore
-        ),
+        datedScoreBlock: getDatedScoreBlockByScore(timeInterval, date, facets, score),
     };
 
     const putParams = {

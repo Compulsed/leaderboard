@@ -14,7 +14,7 @@ import {
 import { 
     getDatedScore,
     getScoreBlockFromScore,
-    getDatedScoreBlockByBoxIndex,
+    getDatedScoreBlockByBlockIndex,
     getDatedScoreBlockByScore
 } from '../util';
 
@@ -39,7 +39,7 @@ export const getTop = async (intervalType: TimeInterval, date: Date, scoreFacet:
     for (var i = topScoreBlock; (i >= 0) && (scores.length < topN); --i)
     {    
         scores = scores.concat(await readLeaderRepository.getScoresInScoreBlock(
-            getDatedScoreBlockByBoxIndex(
+            getDatedScoreBlockByBlockIndex(
                 intervalType,
                 date,
                 scoreFacet, 

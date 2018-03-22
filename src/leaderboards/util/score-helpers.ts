@@ -1,10 +1,28 @@
 import * as moment from 'moment';
-import { TimeInterval, ScoreFacet, ScoreFacetData } from '../model';
+import * as _ from 'lodash';
+import { TimeInterval } from '../model';
+
+export type FACET_VALUE = string
+
+export type OPTIONAL_FACET = FACET_VALUE | null;
+
+export interface SearchFacets {
+    organisationId?: OPTIONAL_FACET
+    location?: OPTIONAL_FACET
+    tag?: OPTIONAL_FACET
+}
+
+export type PartialSearchFacets = Partial<SearchFacets> 
+
+const facetsToString = (searchFacet: PartialSearchFacets) => _(searchFacet)
+    .filter()
+    .reduce((acc, facetValue, facetType) => `${acc}${facetType}-${facetValue}_`, '');
 
 // returns eg. 1
 export const getScoreBlockFromScore = (score: number) =>
     Math.floor(Math.log(score));
 
+// returns 
 export const getDate = (timeInterval, date) => {
     const momentDate = moment(date);
 
@@ -23,23 +41,16 @@ export const getDate = (timeInterval, date) => {
 }
 
 // returns eg. month_2017/09
-export const getDatedScore = (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string): string => {
-    // TODO: Figure out what to input rather than string type
-    const prefix: { [scoreFacet: string]: (msc: any) => string } = {
-        [ScoreFacet.ALL]: () => 'all',
-        [ScoreFacet.LOCATION]: location => 'loc-' + location,
-        [ScoreFacet.ORGANISATION]: organisationId => 'org-' + organisationId,        
-    };
-
-    return `${tag}_${prefix[scoreFacet](scoreFacetsData)}_${intervalType}_${getDate(intervalType, date)}`;
+export const getDatedScore = (intervalType: TimeInterval, date: Date, searchFacet: SearchFacets): string => {
+    return `${facetsToString(searchFacet)}_${getDate(intervalType, date)}`;
 }
 
-// returns eg. month_2017/09_1
-export const getDatedScoreBlockByScore = (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string, score: number): string => {
-    return getDatedScore(intervalType, date, scoreFacet, scoreFacetsData, tag) + '_' + getScoreBlockFromScore(score);
+// returns eg. <...>_month_2017/09_1 (number is box index literal)
+export const getDatedScoreBlockByBlockIndex = (intervalType: TimeInterval, date: Date, searchFacet: SearchFacets, blockIndex: number): string => {
+    return getDatedScore(intervalType, date, searchFacet) + '_' + blockIndex;
 };
 
-// returns eg. month_2017/09_1
-export const getDatedScoreBlockByBoxIndex = (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string, blockIndex: number): string => {
-    return getDatedScore(intervalType, date, scoreFacet, scoreFacetsData, tag) + '_' + blockIndex;
+// returns eg. <...>_month_2017/09_1 (number is calculated by the blocking function)
+export const getDatedScoreBlockByScore = (intervalType: TimeInterval, date: Date, searchFacet: SearchFacets, score: number): string => {
+    return getDatedScore(intervalType, date, searchFacet) + '_' + getScoreBlockFromScore(score);
 };
