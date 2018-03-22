@@ -3,11 +3,12 @@ import 'source-map-support/register';
 import * as AWS from 'aws-sdk';
 import * as _ from 'lodash';
 import * as BbPromise from 'bluebird';
+import { groupByMultiple } from './leaderboards/util';
 
 const kinesis = new AWS.Kinesis();
 
-const noRecords = 20
-const noRecordSets = 100
+const noRecords = 200
+const noRecordSets = 20
 
 const randomNumber = max =>
     Math.floor(Math.random() * max);
@@ -51,11 +52,35 @@ const putRecords = async () => {
 export const handler = async (event, context, cb) => {
     console.log('In handler!');
 
-    await BbPromise.map(
-        _.times(noRecordSets),
-        putRecords,
-        { concurrency: 1 },
-    );
+
+    const groupBy = [
+        {
+            productId: 'associate-bundle',
+            courses: ['csa', 'cda', 'csysops']
+        },
+        {
+            productId: 'professional-bundle',
+            courses: ['devops-pro', 'pro-csa']
+        },
+        {
+            productId: 'god-mode',
+            courses: ['docker', 'csa', 'cda', 'csysops', 'pro-devops', 'pro-csa', ]
+        }
+    ]
+
+    const multipleGroup = groupByMultiple(groupBy, product => product.courses);
+
+    const multipleGroupWithoutCourses = _(multipleGroup)
+        .mapValues(products => products.map(product => _.omit(product, 'courses')))
+        .value()
+
+    console.log(JSON.stringify(multipleGroupWithoutCourses, null, 2));
+
+    // await BbPromise.map(
+    //     _.times(noRecordSets),
+    //     putRecords,
+    //     { concurrency: 1 },
+    // );
 
     cb(undefined, { message: 'In Message returned of Lambda'});
 };

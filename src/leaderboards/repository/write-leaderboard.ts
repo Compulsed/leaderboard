@@ -7,7 +7,8 @@ import {
     LeaderboardRecord,
     TimeInterval,
     ScoreFacet,
-    ScoreFacetData
+    ScoreFacetData,
+    ScoreFacetTuple
 } from '../model';
 
 import { getDatedScore, getDatedScoreBlockByScore } from '../util';
@@ -23,8 +24,26 @@ const promiseRetryOptions = {
     maxTimeoutBetweenRetries: 1000,
 };
 
-export const updateScore = async (userId: string, timeInterval: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string, scoreIncrement: number) => {
-    const datedScore = getDatedScore(timeInterval, date, scoreFacet, scoreFacetsData, tag);
+export interface ScoreUpdateRecord {
+    userId: string
+    score: number
+    date: Date
+    timeInterval: TimeInterval
+    scoreFacet: ScoreFacetTuple
+    tag: string
+}
+
+export const updateScore = async (scoreUpdateRecord: ScoreUpdateRecord) => {
+    const {
+        userId,
+        score,
+        date,
+        timeInterval,
+        scoreFacet: [scoreFacetType, scoreFacetData],
+        tag,
+    } = scoreUpdateRecord;
+
+    const datedScore = getDatedScore(timeInterval, date, scoreFacetType, scoreFacetData, tag);
 
     // Reads the score so the value can be incremented
     const record = await promiseRetry(async (retry, number) => {
@@ -37,9 +56,9 @@ export const updateScore = async (userId: string, timeInterval: TimeInterval, da
         });
     }, promiseRetryOptions);
 
-    const score = (record && record.score) || 0;
+    const currentScore = (record && record.score) || 0;
 
-    const newScore = score + scoreIncrement;
+    const newScore = score + currentScore;
 
     const newRecord: LeaderboardRecord = {
         userId,
@@ -48,8 +67,8 @@ export const updateScore = async (userId: string, timeInterval: TimeInterval, da
         datedScoreBlock: getDatedScoreBlockByScore(
             timeInterval,
             date,
-            scoreFacet,
-            scoreFacetsData,
+            scoreFacetType,
+            scoreFacetData,
             tag,
             newScore
         ),

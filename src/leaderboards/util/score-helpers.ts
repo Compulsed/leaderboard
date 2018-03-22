@@ -5,23 +5,25 @@ import { TimeInterval, ScoreFacet, ScoreFacetData } from '../model';
 export const getScoreBlockFromScore = (score: number) =>
     Math.floor(Math.log(score));
 
-// returns eg. month_2017/09
-export const getDatedScore = (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string): string => {
+export const getDate = (timeInterval, date) => {
     const momentDate = moment(date);
-
-    const weekDate = Math.ceil(momentDate.date() / 7);
 
     const getDate = {
         [TimeInterval.SECOND]: () => momentDate.format('YYYY\/\MM\/DD\/H\/m\/s'),
         [TimeInterval.MINUTE]: () => momentDate.format('YYYY\/\MM\/DD\/H\/m'),
         [TimeInterval.HOUR]: () => momentDate.format('YYYY\/\MM\/DD\/H'),
         [TimeInterval.DAY]: () => momentDate.format('YYYY\/\MM\/DD'),
-        [TimeInterval.WEEK]: () => momentDate.format('YYYY\/\MM\/') + weekDate,
+        [TimeInterval.WEEK]: () => momentDate.format('YYYY\/\MM\/') +  Math.ceil(momentDate.date() / 7),
         [TimeInterval.MONTH]: () => momentDate.format('YYYY\/\MM'),
         [TimeInterval.YEAR]: () => momentDate.format('YYYY'),
         [TimeInterval.ALL_TIME]: () => 'AT',
     };
 
+    return getDate[timeInterval];
+}
+
+// returns eg. month_2017/09
+export const getDatedScore = (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string): string => {
     // TODO: Figure out what to input rather than string type
     const prefix: { [scoreFacet: string]: (msc: any) => string } = {
         [ScoreFacet.ALL]: () => 'all',
@@ -29,7 +31,7 @@ export const getDatedScore = (intervalType: TimeInterval, date: Date, scoreFacet
         [ScoreFacet.ORGANISATION]: organisationId => 'org-' + organisationId,        
     };
 
-    return `${tag}_${prefix[scoreFacet](scoreFacetsData)}_${intervalType}_${getDate[intervalType]()}`;
+    return `${tag}_${prefix[scoreFacet](scoreFacetsData)}_${intervalType}_${getDate(intervalType, date)}`;
 }
 
 // returns eg. month_2017/09_1
