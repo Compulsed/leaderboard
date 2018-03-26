@@ -65,11 +65,13 @@ const stringifyFacets = (facets: Facet[]) =>
         .map(facet => facet.makeString())
         .reduce((acc, facetString) => `${acc}_${facetString}`, '');
 
+/*
+    It is important to order facets so that when they get put into a string, they are all always a consistent order
+    Turns facets into their unique string
+*/
 const getScoreString = (facets: Facet[]): string => {
     const scoreString = _.flow([
-        // It is important to order facets so that when they get put into a string, they are all always a consistent order
         orderFacets,
-        // Turns facets into their unique string
         stringifyFacets,
     ]);
 
@@ -93,13 +95,13 @@ interface LeaderboardRecord {
     score: number
     datedScore: string
     datedScoreBlock: string
-};
+}
 
 
 /*
     Normalize Event
 */
-type inputFacets = { [facetName: string]: string }
+type inputFacets = { [facetName: string]: string[] }
 
 interface InputScoreUpdate {
     userId: string
