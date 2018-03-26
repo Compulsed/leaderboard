@@ -61,14 +61,13 @@ const normaliseRecord = (scoreRecord: InputScoreRecord, intervals: TimeInterval[
 const explodeScores = (normalisedRecord: NormalisedScoreRecord) => {
     const { userId, date, timeIntervals, organisationId, locations, tags, score } = normalisedRecord;
 
-
-
-    const scoreUpdateRecords =  _(timeIntervals)
+    let scoreUpdateRecords =  _(timeIntervals)
         .map(timeInterval => ({ timeInterval }))
         .flatMap(searchFacets => locations.map(location => _.assign({}, searchFacets, { location })))
         .flatMap(searchFacets => tags.map(tag => _.assign({}, searchFacets, { tag })))
-        .flatMap(searchFacets => [searchFacets].concat(_.assign({}, searchFacets, { oranisationId: organisationId })))
         .value();
+
+    if 
 
     const userScoreUpdateRecords: ScoreUpdateRecord;
 
