@@ -1,56 +1,36 @@
-import * as moment from 'moment';
+import { Facet } from '../model';
+
 import * as _ from 'lodash';
-import { TimeInterval } from '../model';
 
-export type FACET_VALUE = string
+const orderFacets = (facets: Facet[]) =>
+    _.sortBy(facets, 'facetKey');
 
-export type OPTIONAL_FACET = FACET_VALUE | null;
+const stringifyFacets = (facets: Facet[]) =>
+    _(facets)
+        .map(facet => facet.makeString())
+        .reduce((acc, facetString) => `${acc}${facetString}`, '');
 
-export interface SearchFacets {
-    organisationId?: OPTIONAL_FACET
-    location?: OPTIONAL_FACET
-    tag?: OPTIONAL_FACET
-}
+/*
+    It is important to order facets so that when they get put into a string, they are all always a consistent order
+    Turns facets into their unique string
+*/
+export const getScoreString = (facets: Facet[]): string => {
+    const scoreString = _.flow([
+        orderFacets,
+        stringifyFacets,
+    ]);
 
-export type PartialSearchFacets = Partial<SearchFacets> 
+    return scoreString(facets);
+};
 
-const facetsToString = (searchFacet: PartialSearchFacets) => _(searchFacet)
-    .filter()
-    .reduce((acc, facetValue, facetType) => `${acc}${facetType}-${facetValue}_`, '');
-
-// returns eg. 1
+// Special mathematical function
 export const getScoreBlockFromScore = (score: number) =>
     Math.floor(Math.log(score));
 
-// returns 
-export const getDate = (timeInterval, date) => {
-    const momentDate = moment(date);
-
-    const getDate = {
-        [TimeInterval.SECOND]: () => momentDate.format('YYYY\/\MM\/DD\/H\/m\/s'),
-        [TimeInterval.MINUTE]: () => momentDate.format('YYYY\/\MM\/DD\/H\/m'),
-        [TimeInterval.HOUR]: () => momentDate.format('YYYY\/\MM\/DD\/H'),
-        [TimeInterval.DAY]: () => momentDate.format('YYYY\/\MM\/DD'),
-        [TimeInterval.WEEK]: () => momentDate.format('YYYY\/\MM\/') +  Math.ceil(momentDate.date() / 7),
-        [TimeInterval.MONTH]: () => momentDate.format('YYYY\/\MM'),
-        [TimeInterval.YEAR]: () => momentDate.format('YYYY'),
-        [TimeInterval.ALL_TIME]: () => 'AT',
-    };
-
-    return getDate[timeInterval];
-}
-
-// returns eg. month_2017/09
-export const getDatedScore = (intervalType: TimeInterval, date: Date, searchFacet: SearchFacets): string => {
-    return `${facetsToString(searchFacet)}_${getDate(intervalType, date)}`;
-}
-
 // returns eg. <...>_month_2017/09_1 (number is box index literal)
-export const getDatedScoreBlockByBlockIndex = (intervalType: TimeInterval, date: Date, searchFacet: SearchFacets, blockIndex: number): string => {
-    return getDatedScore(intervalType, date, searchFacet) + '_' + blockIndex;
-};
+export const getGetScoreByBlockIndex = (facets: Facet[], blockIndex: number) =>
+    `${getScoreString(facets)}_${blockIndex}`;
 
 // returns eg. <...>_month_2017/09_1 (number is calculated by the blocking function)
-export const getDatedScoreBlockByScore = (intervalType: TimeInterval, date: Date, searchFacet: SearchFacets, score: number): string => {
-    return getDatedScore(intervalType, date, searchFacet) + '_' + getScoreBlockFromScore(score);
-};
+export const getDatedScoreBlockByScore = (facets: Facet[], score: number) => 
+    `${getScoreString(facets)}_${getScoreBlockFromScore(score)}`;

@@ -1,15 +1,10 @@
 import * as AWS from 'aws-sdk';
-import * as BbPromise from 'bluebird';
-import * as _ from 'lodash';
 import * as promiseRetry from 'promise-retry';
 
-// Model
-import { LeaderboardRecord, TimeInterval } from '../model';
-import { PartialSearchFacets } from '../util';
+import { LeaderboardRecord } from '../model';
 
-// Functions
-import { getDatedScore, getDatedScoreBlockByScore } from '../util';
-import { getUserScore } from './read-leaderboard';
+const tableName = process.env.LEADERBOARD_TABLE || 'Unknown';
+const indexName = process.env.SCORES_BY_DATED_SCORE_BLOCK_INDEX || 'Unknown';
 
 const docClient = new AWS.DynamoDB.DocumentClient();
 
@@ -20,22 +15,20 @@ const promiseRetryOptions = {
     maxTimeoutBetweenRetries: 1000,
 };
 
-export interface ScoreUpdateRecord {
-    userId: string
-    score: number
-    date: Date
-    timeInterval: TimeInterval
-    facets: PartialSearchFacets
+const putUserScore = (leaderboardRecord: LeaderboardRecord) => {
+    const putParams = {
+        TableName: tableName,
+        Item: leaderboardRecord,
+    };
+
+     return docClient
+        .put(putParams)
+        .promise()
 }
 
-export const updateScore = async (scoreUpdateRecord: ScoreUpdateRecord) => {
-    const { userId, score, date, timeInterval, facets } = scoreUpdateRecord;
-
-    const datedScore = getDatedScore(timeInterval, date, facets);
-
-    // Reads the score so the value can be incremented
-    const record = await promiseRetry(async (retry, number) => {
-        return getUserScore(userId, datedScore).catch(err => {
+export const retryPutUserScore = (leaderboardRecord: LeaderboardRecord) => {
+    return promiseRetry(async (retry, number) => {
+        return putUserScore(leaderboardRecord).catch(err => {
             if (err.code === 'ProvisionedThroughputExceededException') {                
                 retry(err);
             }
@@ -43,25 +36,25 @@ export const updateScore = async (scoreUpdateRecord: ScoreUpdateRecord) => {
             throw err;
         });
     }, promiseRetryOptions);
+}
 
-    const currentScore = (record && record.score) || 0;
-
-    const newScore = score + currentScore;
-
-    const newRecord: LeaderboardRecord = {
-        userId,
-        score: newScore,
-        datedScore, 
-        datedScoreBlock: getDatedScoreBlockByScore(timeInterval, date, facets, score),
+const getUserScore = async (userId: string, datedScore: string) => {
+    const params = {
+        TableName: tableName,
+        Key: { userId, datedScore },
+        ConsistentRead: true,
     };
 
-    const putParams = {
-        TableName: process.env.LEADERBOARD_TABLE as string,
-        Item: newRecord,
-    };
+    const getResult = await docClient
+        .get(params)
+        .promise();
 
-    await promiseRetry(async (retry, number) => {
-        return docClient.put(putParams).promise().catch(err => {
+    return (getResult.Item || null) as (LeaderboardRecord | null);
+}
+
+export const retryGetUserScore = (userId: string, scoreString: string) => {
+    return promiseRetry(async (retry, number) => {
+        return getUserScore(userId, scoreString).catch(err => {
             if (err.code === 'ProvisionedThroughputExceededException') {                
                 retry(err);
             }
@@ -69,6 +62,4 @@ export const updateScore = async (scoreUpdateRecord: ScoreUpdateRecord) => {
             throw err;
         });
     }, promiseRetryOptions);
-
-    return newRecord;
-};
+}
