@@ -4,20 +4,12 @@ import { InputScoreUpdate, ScoreUpdate } from '../../model';
 import { TimeFacet, GenericStringFacet } from '../../model';
 import { supportedIntervals } from '../../model';
 
+// Functions
+import facetFactoryMethod from '../facet-factory-method';
+
 // Export
 const explodeScoreUpdates = (inputscoreUpdates: InputScoreUpdate[]) => {
     return inputscoreUpdates.map(exploreScoreUpdate)
-}
-
-const facetFactoryMethod = (facetKey, facetValue) => {
-    const isKeyAnInterval = facetKey =>
-        _.includes(supportedIntervals, facetKey)
-
-    if (isKeyAnInterval(facetKey)) {
-        return new TimeFacet(facetKey, facetValue);
-    }
-
-    return new GenericStringFacet(facetKey, facetValue);
 }
 
 const exploreScoreUpdate = (inputScoreUpdate: InputScoreUpdate) => {

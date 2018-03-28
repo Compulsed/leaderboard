@@ -6,6 +6,7 @@ import {  LeaderboardRecord } from '../model';
 
 const tableName = process.env.LEADERBOARD_TABLE || 'Unknown';
 const indexName = process.env.SCORES_BY_DATED_SCORE_BLOCK_INDEX || 'Unknown';
+
 const docClient = new AWS.DynamoDB.DocumentClient();
 
 // Gets _ALL_ the scores that belong a to a user

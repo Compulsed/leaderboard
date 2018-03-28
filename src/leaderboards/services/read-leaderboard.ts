@@ -3,56 +3,41 @@ import * as _ from 'lodash';
 import * as uuid from 'uuid/v4';
 import * as BbPromise from 'bluebird';
 
-import { 
-    TimeInterval,
-    LeaderboardRecord,
-    ScoreFacet,
-    ScoreFacetData,
-    ScoreFacetTuple
-} from '../model';
+import { Facet, LeaderboardRecord } from '../model';
 
-import { 
-    getDatedScore,
-    getScoreBlockFromScore,
-    getDatedScoreBlockByBlockIndex,
-    getDatedScoreBlockByScore
-} from '../util';
+import { getScoreBlockFromScore, getGetScoreByBlockIndex } from '../util'; 
 
 import * as readLeaderRepository from '../repository/read-leaderboard';
+import facetFactoryMethod from './facet-factory-method';
 
-export const getTop = async (intervalType: TimeInterval, date: Date, scoreFacet: ScoreFacet, scoreFacetsData: ScoreFacetData, tag: string, topN: number) => {
-    const datedScore = getDatedScore(
-        intervalType,
-        date,
-        scoreFacet,
-        scoreFacetsData,
-        tag
+// TODO: Export into config
+const topScore = 1 * 1000 * 1000;
+
+export const getScores = (timeInterval, date, inputFacets: {}, limit) => {
+    const inputFacetsWithTime = _.assign(
+        {},
+        inputFacets,
+        { [timeInterval]: date }
     );
+    
+    const facets = _.map(inputFacetsWithTime, (facetValue, facetKey) =>
+        facetFactoryMethod(facetValue, facetKey))
 
-    // TODO: Generate based off of function
-    const topScore = 1 * 1000 * 1000;
+    return getTopForFacets(facets, limit);
+}
 
+export const getTopForFacets = async (facets: Facet[], limit: number) => {
     const topScoreBlock = getScoreBlockFromScore(topScore);
 
-    let scores:any = [];
+    let scores: LeaderboardRecord[] = [];
 
-    for (var i = topScoreBlock; (i >= 0) && (scores.length < topN); --i)
-    {    
+    for (var i = topScoreBlock; (i >= 0) && (scores.length < limit); --i) {    
         scores = scores.concat(await readLeaderRepository.getScoresInScoreBlock(
-            getDatedScoreBlockByBlockIndex(
-                intervalType,
-                date,
-                scoreFacet, 
-                scoreFacetsData,
-                tag,
-                i
-            )
+            getGetScoreByBlockIndex(facets, i)
         ));
     }
 
-    scores.sort(function sortDescending(a, b){ 
-        return b.score - a.score
-    });
+    scores.sort((a, b) => b.score - a.score);
 
-    return scores.slice(0, topN); 
+    return scores.slice(0, limit); 
 };
