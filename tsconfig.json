@@ -2,5 +2,6 @@
     "compilerOptions": {
         "strictNullChecks": true,
         "target": "es5",
+        "lib": ["es2015"],
     },
 }
