@@ -21,8 +21,22 @@ const fanoutUpdates = (scoreUpdates: ScoreUpdate[]) => {
     const scoreUpdatePromises = chunkedScores
         .map(invokeWithScoreUpdates);
 
+    // Logging
+    scoreUpdatePromises
+        .map(promise => promise
+            .then(records => console.log(`Done ${records && records.length} records`))
+        );
+
     return BbPromise.all(scoreUpdatePromises)
         .then(leaderboardRecord => _.flatten(leaderboardRecord));
+}
+
+const timeoutHanlder = err => {
+    if (err instanceof BbPromise.TimeoutError) {
+        console.log('Timed out lambda call');
+    }
+
+    return [];
 }
 
 const invokeWithScoreUpdates = (scoreUpdates: ScoreUpdate[]): Promise<LeaderboardRecord[]> => {
@@ -32,9 +46,15 @@ const invokeWithScoreUpdates = (scoreUpdates: ScoreUpdate[]): Promise<Leaderboar
         Payload: JSON.stringify(scoreUpdates)
     };
 
-    return lambda.invoke(params)
+    const lambdaPromise = lambda.invoke(params)
         .promise()
+
+    const resultPromise = BbPromise.resolve(lambdaPromise)
+        .timeout(10 * 1000)
         .then(result => JSON.parse(result.Payload as string))
+        .catch(timeoutHanlder);
+
+    return resultPromise as Bluebird<LeaderboardRecord>[];
 }
 
 export default fanoutUpdates;

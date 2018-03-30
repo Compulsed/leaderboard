@@ -91,7 +91,7 @@ functions:
     events:
       - stream:
           type: kinesis
-          batchSize: 100
+          batchSize: 50
           startingPosition: LATEST          
           arn:
             Fn::GetAtt:

@@ -11,8 +11,8 @@ const docClient = new AWS.DynamoDB.DocumentClient();
 const promiseRetryOptions = {
     randomize: true, 
     retries: 10 * 1000, // Should be high enough
-    minTimeoutBeforeFirstRetry: 10,
-    maxTimeoutBetweenRetries: 1000,
+    minTimeoutBeforeFirstRetry: 1,
+    maxTimeoutBetweenRetries: 20,
 };
 
 const putUserScore = (leaderboardRecord: LeaderboardRecord) => {
