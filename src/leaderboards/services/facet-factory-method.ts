@@ -1,6 +1,6 @@
 import * as _ from 'lodash';
 
-import { supportedIntervals } from '../model';
+import { supportedIntervals } from '../config';
 
 import { TimeFacet, GenericStringFacet } from '../model';
 

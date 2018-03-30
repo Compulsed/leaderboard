@@ -2,12 +2,6 @@
 
 # Design Considersations
 - Making sure that if the lambda times out or something goes wrong, that a batch of records can be replayed
-- Support for multiple streams (userId) as partition key allows for parallelism
-- DynamoDB retries 
-- Aggregation of scores from particular users before applying it to dynamodb
-
-# Other nice things
-- Remove the book keeping table
 
 # Features
 - Want to be able to find the rank that user is in

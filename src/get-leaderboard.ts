@@ -27,7 +27,7 @@ export const handler = async (event: any, context: Context, cb: Callback) => {
             .map((score, index) => Object.assign({}, score, { index }))
 
         cb(undefined, {
-            statusCode: 500,
+            statusCode: 200,
             headers: CORS_HEADERS,
             body: JSON.stringify({ scoresWithPosition }, null, 2),
         });

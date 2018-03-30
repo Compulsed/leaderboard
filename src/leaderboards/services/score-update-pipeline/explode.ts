@@ -2,7 +2,7 @@ import * as _ from 'lodash';
 
 import { InputScoreUpdate, ScoreUpdate } from '../../model';
 import { TimeFacet, GenericStringFacet } from '../../model';
-import { supportedIntervals } from '../../model';
+import { supportedIntervals } from '../../config';
 
 // Functions
 import facetFactoryMethod from '../facet-factory-method';

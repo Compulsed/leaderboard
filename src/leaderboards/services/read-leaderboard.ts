@@ -10,8 +10,7 @@ import { getScoreBlockFromScore, getGetScoreByBlockIndex } from '../util';
 import * as readLeaderRepository from '../repository/read-leaderboard';
 import facetFactoryMethod from './facet-factory-method';
 
-// TODO: Export into config
-const topScore = 1 * 1000 * 1000;
+import { MAX_RECOGNIZABLE_SCORE } from '../config';
 
 export const getScores = (timeInterval, date, inputFacets: {}, limit) => {
     const inputFacetsWithTime = _.assign(
@@ -21,13 +20,13 @@ export const getScores = (timeInterval, date, inputFacets: {}, limit) => {
     );
     
     const facets = _.map(inputFacetsWithTime, (facetValue, facetKey) =>
-        facetFactoryMethod(facetValue, facetKey))
+        facetFactoryMethod(facetKey, facetValue))
 
     return getTopForFacets(facets, limit);
 }
 
 export const getTopForFacets = async (facets: Facet[], limit: number) => {
-    const topScoreBlock = getScoreBlockFromScore(topScore);
+    const topScoreBlock = getScoreBlockFromScore(MAX_RECOGNIZABLE_SCORE);
 
     let scores: LeaderboardRecord[] = [];
 

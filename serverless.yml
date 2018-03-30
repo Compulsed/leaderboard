@@ -18,6 +18,11 @@ provider:
         - dynamodb:DeleteItem
       Resource:
         - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.leaderboardTable.baseTable}*
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+      Resource:
+        - arn:aws:lambda:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:function:*
 
 plugins:
   - serverless-plugin-typescript
@@ -56,25 +61,49 @@ custom:
 functions:
   # Methods
   testFunction:
-    handler: src/leaderboards/model/facet.handler
+    handler: src/test-fn.handler
     environment:
       SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
       LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}    
 
-  scoreStreamHandle:
-    handler: src/score-stream-handler.handler
+  # scoreStreamHandle:
+  #   handler: src/score-stream-handler.handler
+  #   timeout: 300
+  #   memorySize: 3008
+  #   environment:
+  #     LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+  #   events:
+  #     - stream:
+  #         type: kinesis
+  #         batchSize: 10
+  #         startingPosition: LATEST          
+  #         arn:
+  #           Fn::GetAtt:
+  #             - scoreStream
+  #             - Arn
+
+  scoreStreamInvokerHandle:
+    handler: src/score-stream-handler-invoker.handler
     timeout: 300
+    memorySize: 3008
     environment:
-      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+      UPDATE_FUNCTION: ${self:service}-${opt:stage}-scoreStreamWorkerHandle
     events:
       - stream:
           type: kinesis
-          batchSize: 10
+          batchSize: 100
           startingPosition: LATEST          
           arn:
             Fn::GetAtt:
               - scoreStream
               - Arn
+
+  scoreStreamWorkerHandle:
+    handler: src/score-stream-handler-worker.handler
+    timeout: 300
+    memorySize: 3008
+    environment:
+      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
 
   getLeaderboard:
     handler: src/get-leaderboard.handler
@@ -86,7 +115,6 @@ functions:
           path: leaderboard
           method: get
           cors: true
-
 
 resources:
   Resources:
@@ -110,10 +138,10 @@ resources:
             AttributeType: S # eg. <uuid>
           - AttributeName: datedScore
             AttributeType: S # eg. month_2017/09
-          - AttributeName: datedScoreBlock
-            AttributeType: S # eg. month_2017/09_1
-          - AttributeName: score
-            AttributeType: N # eg. 10
+          # - AttributeName: datedScoreBlock
+          #   AttributeType: S # eg. month_2017/09_1
+          # - AttributeName: score
+          #   AttributeType: N # eg. 10
         KeySchema:
           # Allows us to fetch a scores by a specific userId
           - AttributeName: userId
@@ -121,18 +149,18 @@ resources:
           - AttributeName: datedScore
             KeyType: RANGE
         ProvisionedThroughput:
-          ReadCapacityUnits: 5
-          WriteCapacityUnits: 5
-        GlobalSecondaryIndexes:
-          # Allows us to lookup top scores in a block
-          - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
-            KeySchema:
-             - AttributeName: datedScoreBlock
-               KeyType: HASH
-             - AttributeName: score
-               KeyType: RANGE
-            Projection:
-              ProjectionType: ALL
-            ProvisionedThroughput:
-              ReadCapacityUnits: 5
-              WriteCapacityUnits: 5
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        # GlobalSecondaryIndexes:
+        #   # Allows us to lookup top scores in a block
+        #   - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
+        #     KeySchema:
+        #      - AttributeName: datedScoreBlock
+        #        KeyType: HASH
+        #      - AttributeName: score
+        #        KeyType: RANGE
+        #     Projection:
+        #       ProjectionType: ALL
+        #     ProvisionedThroughput:
+        #       ReadCapacityUnits: 5
+        #       WriteCapacityUnits: 5

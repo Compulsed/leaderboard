@@ -1,13 +1,18 @@
 import * as BbPromise from 'bluebird';
+import * as _ from 'lodash';
 
 import { LeaderboardRecord } from '../../model';
 
+import { PIPELINE_UPDATE_CONCURRENCY } from '../../config';
+
 // export
-const pipelineUpdates = (updateTasks: (() => Promise<LeaderboardRecord>)[]) => {
+const pipelineUpdates = (updateTasks: (() => Promise<LeaderboardRecord>)[]) => {        
+    const randomizedUpdates = _.shuffle(updateTasks);
+    
     return BbPromise.map(
-         updateTasks,
-         (updateTask: () => Promise<LeaderboardRecord>) => updateTask(),
-         { concurrency: 10 }
+        randomizedUpdates,
+        (updateTask: () => Promise<LeaderboardRecord>) => updateTask(),
+        { concurrency: PIPELINE_UPDATE_CONCURRENCY }
      );
  }
  
