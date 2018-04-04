@@ -24,37 +24,25 @@ const fanoutUpdates = (scoreUpdates: ScoreUpdate[]) => {
     // Logging
     scoreUpdatePromises
         .map(promise => promise
-            .then(records => console.log(`Done ${records && records.length} records`))
+            .then(result => console.log(`Done taskId ${result.taskId} - ${result.records && result.records.length} records`))
         );
 
     return BbPromise.all(scoreUpdatePromises)
         .then(leaderboardRecord => _.flatten(leaderboardRecord));
 }
 
-const timeoutHanlder = err => {
-    if (err instanceof BbPromise.TimeoutError) {
-        console.log('Timed out lambda call');
-    }
+const invokeWithScoreUpdates = (scoreUpdates: ScoreUpdate[]): Promise<{ taskId: string, records: LeaderboardRecord[]}> => {
+    const taskId = uuid() as string;
 
-    return [];
-}
-
-const invokeWithScoreUpdates = (scoreUpdates: ScoreUpdate[]): Promise<LeaderboardRecord[]> => {
     const params = {
         FunctionName: updateFunctionName, 
         InvocationType: 'RequestResponse', 
-        Payload: JSON.stringify(scoreUpdates)
+        Payload: JSON.stringify({ taskId, scoreUpdates })
     };
 
-    const lambdaPromise = lambda.invoke(params)
+    return lambda.invoke(params)
         .promise()
-
-    const resultPromise = BbPromise.resolve(lambdaPromise)
-        .timeout(10 * 1000)
-        .then(result => JSON.parse(result.Payload as string))
-        .catch(timeoutHanlder);
-
-    return resultPromise as Bluebird<LeaderboardRecord>[];
+        .then(result => ({ taskId, records: JSON.parse(result.Payload as string)}));
 }
 
 export default fanoutUpdates;

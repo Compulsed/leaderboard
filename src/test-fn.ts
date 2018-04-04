@@ -8,7 +8,7 @@ import { InputScoreUpdate } from './leaderboards/model';
 
 const kinesis = new AWS.Kinesis();
 
-const noRecords = 500
+const noRecords = 200
 const noRecordSets = 20
 
 const randomNumber = max =>

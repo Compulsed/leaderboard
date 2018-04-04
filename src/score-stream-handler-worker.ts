@@ -8,11 +8,11 @@ import { ScoreUpdate, LeaderboardRecord, WorkerInputScoreUpdate } from './leader
 // Functions
 import { updateScoresFanoutWorker } from './leaderboards/services/score-update-pipeline';
 
-export const handler = async (event: WorkerInputScoreUpdate[], context: Context, cb: Callback) => {
-    console.log('Records to progress:', event.length);
+export const handler = async (event: {taskId: string, scoreUpdates: WorkerInputScoreUpdate[]}, context: Context, cb: Callback) => {
+    console.log(`TaskId (${event.taskId}) to progress (${event.scoreUpdates.length}) records`);
 
     try {
-        const results = await updateScoresFanoutWorker(event);
+        const results = await updateScoresFanoutWorker(event.scoreUpdates);
 
         return cb(undefined, results);
     } catch (err) {

@@ -1,0 +1,26 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceRoot}/src/streams/index.ts",
+            "outFiles": [
+              "${workspaceRoot}/dist/index.js"
+            ],
+            "sourceMaps": true,
+            "stopOnEntry": false,
+            "args": [],
+            "cwd": "${workspaceRoot}",
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "console": "internalConsole",
+            "preLaunchTask": "compile",
+            "name": "DEBUG"
+          }
+    ]
+}

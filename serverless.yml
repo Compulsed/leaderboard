@@ -85,7 +85,7 @@ functions:
   scoreStreamInvokerHandle:
     handler: src/score-stream-handler-invoker.handler
     timeout: 300
-    memorySize: 3008
+    memorySize: 512
     environment:
       UPDATE_FUNCTION: ${self:service}-${opt:stage}-scoreStreamWorkerHandle
     events:
@@ -101,7 +101,7 @@ functions:
   scoreStreamWorkerHandle:
     handler: src/score-stream-handler-worker.handler
     timeout: 300
-    memorySize: 3008
+    memorySize: 1536
     environment:
       LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
 
@@ -154,7 +154,7 @@ resources:
         # GlobalSecondaryIndexes:
         #   # Allows us to lookup top scores in a block
         #   - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
-        #     KeySchema:
+        #     KeySchema:,
         #      - AttributeName: datedScoreBlock
         #        KeyType: HASH
         #      - AttributeName: score

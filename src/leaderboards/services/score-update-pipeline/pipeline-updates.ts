@@ -6,12 +6,10 @@ import { LeaderboardRecord } from '../../model';
 import { PIPELINE_UPDATE_CONCURRENCY } from '../../config';
 
 // export
-const pipelineUpdates = (updateTasks: (() => Promise<LeaderboardRecord>)[]) => {        
-    const randomizedUpdates = _.shuffle(updateTasks);
-    
+const pipelineUpdates = (updateTasks: (() => Promise<LeaderboardRecord>)[]) => {              
     return BbPromise.map(
-        randomizedUpdates,
-        (updateTask: () => Promise<LeaderboardRecord>) => updateTask(),
+        updateTasks,
+        updateTask => updateTask(),
         { concurrency: PIPELINE_UPDATE_CONCURRENCY }
      );
  }

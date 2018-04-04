@@ -10,8 +10,8 @@ export const supportedIntervals = [
     'allTime',
 ];
 
-export const PIPELINE_UPDATE_CONCURRENCY = 25;
+export const PIPELINE_UPDATE_CONCURRENCY = 5;
 
-export const LAMBDA_CHUNCK_SIZE = 500; // Should take roughly 1.5 seconds
+export const LAMBDA_CHUNCK_SIZE = 250; // Should take roughly 1.5 seconds
 
 export const MAX_RECOGNIZABLE_SCORE = 10 * 1000 * 1000;
