@@ -1,6 +1,5 @@
 .serverless/
 node_modules/
-.env
 .build/
 **/*.js
 dist/
