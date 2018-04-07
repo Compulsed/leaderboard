@@ -1,22 +1,59 @@
 import * as BbPromise from 'bluebird';
 import * as _ from 'lodash';
-import * as Rx from 'rxjs';
 
-let counter = 0;
 
-const getScore = () => 
-    BbPromise.delay(1000)
-        .then(() => ({ index: ++counter }));
+import { Readable, Writable, Transform } from 'stream';
 
-const write = score => BbPromise.delay(1000)
-    .then(() => console.log(`Score Written: ${score}`));
+class ReadStream extends Readable {
+    counter = 0;
 
-const observable = Rx.Observable.create(observer => {
-    getScore().then(observer.next)
-});
+    constructor(params) {
+        super({ objectMode: true, highWaterMark: 1000 });
+    }
 
-observable.subscribe(
-    value => console.log(value),
-    err => {},
-    () => console.log('this is the end')
-);
+    async _read(size) {
+        this.push(++this.counter);
+    }
+}
+
+class TransformStream extends Transform {
+    previous = null
+
+    constructor(params) {
+        super({ objectMode: true, highWaterMark: 1000 });
+    }
+
+    async _transform(item, encoding, callback) {    
+        if (this.previous) {
+            this.push(item + this.previous);
+            this.clearPrevious();
+        } else {
+            this.previous = item;
+        }
+
+        callback();
+    }
+
+    clearPrevious() {
+        this.previous = null;
+    }
+}
+
+
+class WriteStream extends Writable {
+    constructor(params) {
+        super({ objectMode: true, highWaterMark: 1000 });
+    }
+
+    async _write(item, encoding, callback) {
+        console.log(JSON.stringify({ item, encoding }));
+
+        await BbPromise.delay(1000);
+        
+        callback();
+    }
+}
+
+ new ReadStream({})
+    .pipe(new TransformStream({}))
+    .pipe(new WriteStream({}));
