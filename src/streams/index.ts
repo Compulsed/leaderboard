@@ -15,6 +15,13 @@ const standardOutSSL = require('single-line-log').stdout;
 
 import { Readable, Writable, Transform } from 'stream';
 
+const loggerWriteStream = _.memoize(fileName => 
+    fs.createWriteStream(`./stream/${fileName}.txt`, { flags: 'w' }))
+
+const log = (file, message) => {
+    loggerWriteStream(file).write(message);
+}
+
 class ReadStream extends Readable {
     counter = 0;
 
@@ -24,72 +31,86 @@ class ReadStream extends Readable {
         super({ objectMode: true, highWaterMark: 6 });
 
         this.on('close', () => {
-            // console.log('\non close listener called in reader');
+            log('read', 'on close listener called in reader\n');
             this.state = 'cls'
         });
 
         this.on('end', () => {
-            // console.log('\non end listener called in reader');
+            log('read', 'on end listener called in reader\n');
             this.state = 'end'
         });
 
         this.on('error', err => {
-            // console.log('\non error listener called in reader', err);
+            log('read', 'on error listener called in reader\n');
             this.state = 'err'
         });
     }
 
     // Size is how many values
     async _read(size) {
-        await BbPromise.delay(500);
+        log('size', `Size: ${size}\n`);
 
-        this.push(this.counter);
-        ++this.counter;
+        if (this.state !== 'cls' && this.state !== 'dst') {
+            await BbPromise.delay(500);
 
-        if (this.counter === 30) {
-            this.emit('error', 'Some error message');
+            this.push(this.counter);
+            ++this.counter;
+
+            // if (this.counter === 30) {
+            //     this.emit('error', 'Some error message'); // cloud also emit `close` / `destory`
+            // }
         }
 
-        if (this.counter === 30) {
-            // console.log('\nPushing Finish');
-            this.push(null);
+        if (this.counter === 30 || this.state === 'cls' || this.state === 'dst') {
+            this.push(null); // Tells the readstream to stop calling _read, and propagates the 'end'
         }
     }
 
     async _destroy(err, callback) {
+        this.state = 'dst';
 
+        await BbPromise.delay(3000);
+
+        callback();
     }
 }
 
 class TransformStream extends Transform {
     state: string | null = 'nul';
+    transformNumber;
 
     constructor(params) {
         super({ objectMode: true, highWaterMark: 2 });
 
+        this.transformNumber = params.transformNumber || 0;
+
         // First
         this.on('finish', () => {
-            // console.log('\non finish listerner is called in transformer')
-            this.state = 'fin'
+            log(`transform-${this.transformNumber}`, 'on finish listerner is called in transformer\n')
+            // this.state = 'fns';
         });
 
         this.on('close', () => {
-            // console.log('\non close listener called in transformer');
+            log(`transform-${this.transformNumber}`, 'on close listener called in transformer\n');
             this.state = 'cls'
         });
 
         this.on('end', () => {
-            // console.log('\non end listener called in transformer');
+            log(`transform-${this.transformNumber}`, 'on end listener called in transformer\n');
             this.state = 'end'
         });
 
         this.on('drain', () => {
-            // console.log('\non drain listerner is called in transformer');
+            log(`transform-${this.transformNumber}`, 'on drain listerner is called in transformer\n');
             this.state = 'drn'
+
+            this.once('drain', () => {
+                this.state = 'nul' 
+            });
         });
 
         this.on('error', err => {
-            // console.log('\non error listener called in transformer', err);
+            log(`transform-${this.transformNumber}`, 'on error listener called in transformer\n');
             this.state = 'err'
         });
     }
@@ -104,16 +125,32 @@ class TransformStream extends Transform {
 
     // Delays the 'finish' until callback is called -- close or write the remaining buffer
     async _final(callback) {
+        this.state = 'fnl';
 
+        await BbPromise.delay(3000);
+
+        callback(); // sets the stream to flush vvv
+    }
+
+    // Flush & the finish event are called almost at the same time
+    // -> final
+    // -> (flush -> finish)
+    // -> end
+    async _flush(callback) {
+        this.state = 'fsh';
+
+        await BbPromise.delay(10000);
+
+        callback(); // sets the steam to end
     }
 
     // Called externally
     async _destroy(err, callback) {
+        this.state = 'dst';
 
-    }
+        await BbPromise.delay(3000);
 
-    async _flush(callback) {
-
+        callback();
     }
 }
 
@@ -127,23 +164,27 @@ class WriteStream extends Writable {
         super({ objectMode: true, highWaterMark: 4 });
 
         this.on('close', () => {
-            // console.log('\non close listener called in writer');
+            log('write', 'on close listener called in writer\n');
             this.state = 'cls'
         });
 
         this.on('finish', () => {
-            // console.log('\non finish listerner is called in writer')
+            log('write', 'on finish listerner is called in writer\n');
             this.file.end();
-            this.state = 'fin'
+            this.state = 'fns';
         });
 
         this.on('drain', () => {
-            // console.log('\non drain listerner is called in writer');
-            this.state = 'drn'
+            log('write', 'on drain listerner is called in writer\n');
+            this.state = 'drn';
+
+            this.once('drain', () => {
+                this.state = 'nul' 
+            });
         });
 
         this.on('error', err => {
-            // console.log('\non error listener called in writer', err);
+            log('write', 'on error listener called in writer\n');
             this.state = 'err'
         });
     }
@@ -156,28 +197,56 @@ class WriteStream extends Writable {
         callback();
     }
 
+    async _writev(chunks, callback) {
+        await BbPromise.map(chunks, async ({ chunk }) => {
+            await BbPromise.delay(1000);
+        
+            this.file.write(`${chunk} - ${JSON.stringify(chunks.map(_.property('chunk')))}\n`);
+        });
+
+        callback();
+    }
+
     // Delays the 'finish' until callback is called -- close or write the remaining buffer
     async _final(callback) {
+        this.state = 'fnl';
+        
+        await BbPromise.delay(3000);
 
+        callback();
     }
 
     // Called externally
     async _destroy(err, callback) {
+        this.state = 'dst';
 
+        await BbPromise.delay(3000);
+
+        callback();
     }
 }
 
-console.log(`${process.version}`)
-
 const readableStream = new ReadStream({})
-const transformStream1 = new TransformStream({})
-const transformStream2 = new TransformStream({}) 
+const transformStream1 = new TransformStream({ transformNumber: 1 })
+const transformStream2 = new TransformStream({ transformNumber: 2 }) 
 const writeStream = new WriteStream({});
 
 readableStream
     .pipe(transformStream1)
     .pipe(transformStream2)
     .pipe(writeStream);
+
+(async () => {
+    await BbPromise.delay(10 * 1000);
+
+    readableStream.destroy();
+});
+
+(async () => {
+    await BbPromise.delay(10 * 1000);
+
+    readableStream.emit('close')
+});
 
 (async () => {
     while (true) {
