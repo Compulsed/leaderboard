@@ -3,13 +3,16 @@ import 'source-map-support/register';
 import * as AWS from 'aws-sdk';
 import * as _ from 'lodash';
 import * as BbPromise from 'bluebird';
+import * as uuidv4 from 'uuid/v4';
 
 import { InputScoreUpdate } from './leaderboards/model';
 
-const kinesis = new AWS.Kinesis();
+const sqs = new AWS.SQS();
 
-const noRecords = 200
-const noRecordSets = 20
+const queueUrl = 'https://sqs.us-east-1.amazonaws.com/145722906259/scoreQueue.fifo';
+
+const noRecords = 10
+const noRecordSets = 300
 
 const randomNumber = max =>
     Math.floor(Math.random() * max);
@@ -29,9 +32,10 @@ const generateRecord = index => {
     };
 
     const record = {
-        PartitionKey: key,
-        Data: JSON.stringify({ data }),
-    }
+        Id: uuidv4(),
+        MessageBody: JSON.stringify(data),
+        MessageGroupId: data.userId,
+    };
 
     return record;
 };
@@ -41,16 +45,16 @@ const putRecords = async () => {
 
     const records = _.times(noRecords, generateRecord);
 
-    const putRecords = {
-        StreamName: 'kinesis-leaderboard-dev-scoreStream',
-        Records: records,
+    const sqsEnqueueReponse = {
+        QueueUrl: queueUrl,
+        Entries: records,
     };
 
-    const kinesisResult = await kinesis
-        .putRecords(putRecords)
+    const enqueueResponse = await sqs
+        .sendMessageBatch(sqsEnqueueReponse)
         .promise();
 
-    console.log(JSON.stringify({ kinesisResult }, null, 2));
+    console.log(JSON.stringify({ enqueueResponse }, null, 2));
 };
 
 export const handler = async (event, context, cb) => {
