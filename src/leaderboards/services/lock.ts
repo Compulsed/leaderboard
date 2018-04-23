@@ -1,6 +1,6 @@
 const BbPromise = require('bluebird');
 const AWS = require('aws-sdk');
-const documentClient = new AWS.DynamodocumentClient.DocumentClient();
+const docClient = new AWS.DynamodocumentClient.DocumentClient();
 
 const lockKey = 'score-queue-lock';
 const lockTable = process.env.LOCK_TABLE_NAME || 'lockTable';
