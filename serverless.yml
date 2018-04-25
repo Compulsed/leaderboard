@@ -52,6 +52,10 @@ custom:
   kinesis:
     streams:
       scoreStream: ${self:service}-${opt:stage}-scoreStream
+    lockTable:
+      baseTable: ${self:service}-${opt:stage}-lockTable
+    semaphoreTable:
+      baseTable: ${self:service}-${opt:stage}-semaphoreTable
   dynamodb:
     tables:
       lockTable:
@@ -84,6 +88,16 @@ functions:
   #           Fn::GetAtt:
   #             - scoreStream
   #             - Arn
+
+  semaphoreHandler:
+    handler: src/semaphore-processor.handler
+    timeout: 300
+    memorySize: 256
+    environment:
+      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+      LOCK_TABLE_NAME: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+    events:
+      - schedule: rate(1 minute)
 
   scoreStreamQueueInvokerHandle:
     handler: src/score-stream-queue-invoker.handler
@@ -121,7 +135,8 @@ functions:
     handler: src/get-leaderboard.handler
     environment:
       SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
-      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}    
+      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}  
+      SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}  
     events:
       - http:
           path: leaderboard
@@ -201,3 +216,25 @@ resources:
         TimeToLiveSpecification:
           AttributeName: 'expires'
           Enabled: true
+
+    semaphoreTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Delete
+      Properties:
+        TableName: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 2
+        AttributeDefinitions:
+          - AttributeName: semaphore_key
+            AttributeType: S
+          - AttributeName: semaphore_sort_key
+            AttributeType: S            
+        KeySchema:
+          - AttributeName: semaphore_key
+            KeyType: HASH
+          - AttributeName: semaphore_sort_key
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: 'expires'
+          Enabled: true          

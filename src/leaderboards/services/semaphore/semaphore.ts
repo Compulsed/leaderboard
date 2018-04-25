@@ -35,7 +35,6 @@ const tryObtain = async (attemptNumber = 0) => {
 const selectSemaphore = (semaphoreList: Semaphore[]) => {
     const optionalSemaphore = _(semaphoreList)
         .filter(semaphore => Date.now() > (semaphore.expires || 0))
-        .filter(semaphore => semaphore.tomb_stone !== true)
         .shuffle()
         .first();
 
@@ -59,8 +58,7 @@ const attemptTakeSemaphore = async semaphore => {
         ConditionExpression: `
             attribute_exists(semaphore_key) AND
             attribute_exists(semaphore_sort_key) AND
-            attribute_not_exists(tomb_stone)
-            :currentTime > #expires AND
+            (attribute_not_exists(expires) OR :currentTime > #expires)
         `,
         UpdateExpression: 'set #expires = :expires',
         ExpressionAttributeNames: {
@@ -96,6 +94,11 @@ const releaseSemaphore = async semaphore => {
             semaphore_key: semaphore.semaphore_key,
             semaphore_sort_key: semaphore.semaphore_sort_key,
         },
+        // Only need release it if it still exists
+        ConditionExpression: `
+            attribute_exists(semaphore_key) AND
+            attribute_exists(semaphore_sort_key)
+        `,
         UpdateExpression: 'set #expires = :expires',
         ExpressionAttributeNames: {
             '#expires': 'expires',

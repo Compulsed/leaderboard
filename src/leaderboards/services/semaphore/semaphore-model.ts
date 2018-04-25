@@ -2,7 +2,6 @@ export interface Semaphore {
     semaphore_key: string
     semaphore_sort_key: string
     expires: number | null
-    tomb_stone: true | null
 }
 
 export const semaphoreTableName = process.env.SEMAPHORE_TABLE || 'Unknown';

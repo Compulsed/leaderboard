@@ -36,6 +36,8 @@ const queryTableCapacity = async () => {
     const readResult = await DynamoDB
         .describeTable({ TableName: leaderboardTableName })
         .promise();
+
+    console.log(JSON.stringify({ readResult }, null, 2))
         
     const capacity = Math.min(
         _.get(readResult, 'Table.ProvisionedThroughput.ReadCapacityUnits'),
@@ -45,7 +47,9 @@ const queryTableCapacity = async () => {
     return capacity;      
 }
 
-const increaseSemaphores = async amount => {
+const increaseSemaphores = async increaseAmount => {
+    console.log(`Increase Semaphores: ${increaseAmount}`);
+
     const addSemaphore = () => {
         const putParams = {
             TableName: semaphoreTableName,
@@ -56,68 +60,46 @@ const increaseSemaphores = async amount => {
             },
         };
     
+        console.log('Putting Semaphores: ', JSON.stringify({ putParams }, null, 2))
+
         return docClient
             .put(putParams)
             .promise()
     }
 
-    await BbPromise.all(_.times(amount, addSemaphore));
-}
-
-const tombStoneSemaphores = async (semaphores) => {
-    const params = {
-        TableName: semaphoreTableName,
-        Key: {
-            semaphore_key: semaphore.semaphore_key,
-            semaphore_sort_key: semaphore.semaphore_sort_key,
-        },
-        UpdateExpression: 'set #tomb_stone = :true',
-        ExpressionAttributeNames: {
-            '#tomb_stone': 'tomb_stone',
-        },
-        ExpressionAttributeValues: {
-            ':true': true
-        },
-    };
-
-    console.log(
-        'Attempting to acquire lease on semaphore: ',
-        JSON.stringify(params, null, 2)
-    );
-
-    try {
-        const updateResult = await docClient
-            .update(params)
-            .promise();
-    } catch (err) {
-        return null;
-    }
-
-    await BbPromise.all(_.times(amount, addSemaphore));
+    await BbPromise.all(_.times(increaseAmount, addSemaphore));
 }
 
 // Because we are re-querying, 
-const decreaseSemaphores = async amountToDecrease => {
+const decreaseSemaphores = async decreaseAmount => {
+    console.log(`Decrease Semaphores: ${decreaseAmount}`);
+
+    const deleteSemaphore = semaphore => {
+        const deleteParams = {
+            TableName: semaphoreTableName,
+            Key: {
+                semaphore_key: semaphore.semaphore_key,
+                semaphore_sort_key: semaphore.semaphore_sort_key,
+            },
+        };
+    
+        console.log('Taking Semaphores: ', JSON.stringify({ deleteParams }, null, 2))
+
+        return docClient
+            .delete(deleteParams)
+            .promise();
+    }
+
     const semaphores = await querySemaphores();
 
     // Marked for deletion is first, then the ones who expire next
     const orderedSemaphores = _(semaphores)
-        .sortBy(['tomb_stone', 'expires'])
+        .sortBy(['expires'])
         .reverse()
-        .value();
 
-    const tombStonedSemaphores = _.filter(orderedSemaphores, 'tomb_stone');
+    const semaphoresToRemove = orderedSemaphores.slice(0, decreaseAmount - 1);
 
-    if (amountToDecrease < tombStonedSemaphores.length) {
-        const nonTombstonedSemaphores = _(semaphores)
-            .sortBy('expires')
-            .filter(semaphore => semaphore.tomb_stone !== true)
-            .reverse()
-            .value();    
-        
-        // TODO: Check logic
-        tombStoneSemaphores(nonTombstonedSemaphores.slice(0, amountToDecrease - tombStonedSemaphores.length))
-    }
+    await BbPromise.all(semaphoresToRemove.map(deleteSemaphore));
 }
 
 const updateSemaphores = async (currentSemaphoreCount, recommendedSemaphoreCount) => {
@@ -128,7 +110,7 @@ const updateSemaphores = async (currentSemaphoreCount, recommendedSemaphoreCount
     }
 }
 
-const adjustSemaphoreCount = async () => {
+export const adjustSemaphoreCount = async () => {
     const [currentSemaphores, capacity] = await BbPromise.all([querySemaphores(), queryTableCapacity()]);
 
     const recommendedSemaphoreCount = Math.ceil(capacity / WORKER_WRITE_SPEED);
