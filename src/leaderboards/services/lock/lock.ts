@@ -48,7 +48,7 @@ const removeLock = () => {
         .promise();
 };
 
-const obtainLock = () => {
+export const obtainLock = () => {
     return BbPromise.resolve(createLock()).disposer(() => {
         return removeLock().catch((err) => {
             console.log('Error removing lock', err);

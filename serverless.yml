@@ -1,4 +1,4 @@
-service: kinesis-leaderboard
+service: fifo-leaderboard
 
 frameworkVersion: ">=1.8.0 <2.0.0"
 
@@ -9,6 +9,11 @@ provider:
   iamRoleStatements:
     - Effect: Allow
       Action:
+        - sqs:ReceiveMessage
+      Resource:
+        - arn:aws:sqs:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:scoreQueue.fifo*
+    - Effect: Allow
+      Action:
         - dynamodb:Query
         - dynamodb:Scan
         - dynamodb:GetItem
@@ -16,9 +21,11 @@ provider:
         - dynamodb:UpdateItem
         - dynamodb:BatchWriteItem
         - dynamodb:DeleteItem
+        - dynamodb:DescribeTable
       Resource:
         - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.leaderboardTable.baseTable}*
         - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.lockTable.baseTable}*
+        - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.semaphoreTable.baseTable}*
     - Effect: Allow
       Action:
         - lambda:InvokeFunction
@@ -52,12 +59,10 @@ custom:
   kinesis:
     streams:
       scoreStream: ${self:service}-${opt:stage}-scoreStream
-    lockTable:
-      baseTable: ${self:service}-${opt:stage}-lockTable
-    semaphoreTable:
-      baseTable: ${self:service}-${opt:stage}-semaphoreTable
   dynamodb:
     tables:
+      semaphoreTable:
+        baseTable: ${self:service}-${opt:stage}-semaphoreTable
       lockTable:
         baseTable: ${self:service}-${opt:stage}-lockTable
       leaderboardTable:
@@ -71,23 +76,7 @@ functions:
     handler: src/test-fn.handler
     environment:
       SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
-      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}    
-
-  # scoreStreamHandle:
-  #   handler: src/score-stream-handler.handler
-  #   timeout: 300
-  #   memorySize: 3008
-  #   environment:
-  #     LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
-  #   events:
-  #     - stream:
-  #         type: kinesis
-  #         batchSize: 10
-  #         startingPosition: LATEST          
-  #         arn:
-  #           Fn::GetAtt:
-  #             - scoreStream
-  #             - Arn
+      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
 
   semaphoreHandler:
     handler: src/semaphore-processor.handler
@@ -95,48 +84,26 @@ functions:
     memorySize: 256
     environment:
       LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
-      LOCK_TABLE_NAME: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+      SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
     events:
       - schedule: rate(1 minute)
 
-  scoreStreamQueueInvokerHandle:
-    handler: src/score-stream-queue-invoker.handler
-    timeout: 300
-    memorySize: 512
-    environment:
-      UPDATE_FUNCTION: ${self:service}-${opt:stage}-scoreStreamWorkerHandle
-      LOCK_TABLE_NAME: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
-
-
-  scoreStreamInvokerHandle:
-    handler: src/score-stream-handler-invoker.handler
-    timeout: 300
-    memorySize: 512
-    environment:
-      UPDATE_FUNCTION: ${self:service}-${opt:stage}-scoreStreamWorkerHandle
-    # events:
-    #   - stream:
-    #       type: kinesis
-    #       batchSize: 50
-    #       startingPosition: LATEST          
-    #       arn:
-    #         Fn::GetAtt:
-    #           - scoreStream
-    #           - Arn
-
-  scoreStreamWorkerHandle:
-    handler: src/score-stream-handler-worker.handler
+  scoreWriterHandler:
+    handler: src/score-writer.handler
     timeout: 300
     memorySize: 1536
     environment:
       LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+      SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
+      SELF_FUNCTION: ${self:service}-${opt:stage}-scoreWriterHandler
+    events:
+      - schedule: rate(1 minute)      
 
   getLeaderboard:
     handler: src/get-leaderboard.handler
     environment:
       SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
       LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}  
-      SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}  
     events:
       - http:
           path: leaderboard
@@ -145,13 +112,6 @@ functions:
 
 resources:
   Resources:
-    # scoreStream:
-    #   Type: "AWS::Kinesis::Stream"
-    #   Properties: 
-    #     Name: ${self:custom.kinesis.streams.scoreStream}
-    #     RetentionPeriodHours: 24
-    #     ShardCount: 1
-
     scoreQueue:
       Type: "AWS::SQS::Queue"
       Properties:
@@ -159,9 +119,6 @@ resources:
         FifoQueue: true
         ContentBasedDeduplication: true
 
-    # Updating score requires
-    # - 1 Write/Read to base table (conditionals may make this just 1 write)
-    # - 2 Writes to index
     leaderboardTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: Delete
@@ -198,24 +155,6 @@ resources:
         #     ProvisionedThroughput:
         #       ReadCapacityUnits: 5
         #       WriteCapacityUnits: 5
-
-    lockTable:
-      Type: AWS::DynamoDB::Table
-      DeletionPolicy: Delete
-      Properties:
-        TableName: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
-        ProvisionedThroughput:
-          ReadCapacityUnits: 2
-          WriteCapacityUnits: 2
-        AttributeDefinitions:
-            - AttributeName: lock_key
-              AttributeType: S
-        KeySchema:
-            - AttributeName: lock_key
-              KeyType: HASH
-        TimeToLiveSpecification:
-          AttributeName: 'expires'
-          Enabled: true
 
     semaphoreTable:
       Type: AWS::DynamoDB::Table

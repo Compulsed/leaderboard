@@ -11,14 +11,14 @@ const sqs = new AWS.SQS();
 
 const queueUrl = 'https://sqs.us-east-1.amazonaws.com/145722906259/scoreQueue.fifo';
 
-const noRecords = 10
+const noRecords = 5
 const noRecordSets = 300
 
 const randomNumber = max =>
     Math.floor(Math.random() * max);
 
 const generateRecord = index => {
-    const key = String(randomNumber(50));
+    const key = String(randomNumber(500));
 
     const data: InputScoreUpdate = {
         userId: key,
@@ -28,6 +28,7 @@ const generateRecord = index => {
             tags: ['aws', 'ec2'],
             organisationIds: ['org1'],
             locations: ['melbourne', 'australia'],
+            cohorts: ['1', '2'],
         },
     };
 

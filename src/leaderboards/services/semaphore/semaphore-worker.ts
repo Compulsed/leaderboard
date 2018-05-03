@@ -1,13 +1,14 @@
 import * as _ from 'lodash';
 import * as AWS from 'aws-sdk';
 import * as uuidv4 from 'uuid/v4';
+import * as BbPromise from 'bluebird';
 
 const docClient = new AWS.DynamoDB.DocumentClient();
 const DynamoDB = new AWS.DynamoDB();
 
 import { Semaphore, semaphoreKey, semaphoreTableName, leaderboardTableName } from './semaphore-model';
 
-const WORKER_WRITE_SPEED = 200;
+const WORKER_WRITE_SPEED = 150;
 
 const querySemaphores = async () => {
     const params = {
@@ -45,7 +46,7 @@ const queryTableCapacity = async () => {
     );
 
     return capacity;      
-}
+};
 
 const increaseSemaphores = async increaseAmount => {
     console.log(`Increase Semaphores: ${increaseAmount}`);
@@ -68,7 +69,7 @@ const increaseSemaphores = async increaseAmount => {
     }
 
     await BbPromise.all(_.times(increaseAmount, addSemaphore));
-}
+};
 
 // Because we are re-querying, 
 const decreaseSemaphores = async decreaseAmount => {
@@ -96,11 +97,12 @@ const decreaseSemaphores = async decreaseAmount => {
     const orderedSemaphores = _(semaphores)
         .sortBy(['expires'])
         .reverse()
+        .value()
 
     const semaphoresToRemove = orderedSemaphores.slice(0, decreaseAmount - 1);
 
     await BbPromise.all(semaphoresToRemove.map(deleteSemaphore));
-}
+};
 
 const updateSemaphores = async (currentSemaphoreCount, recommendedSemaphoreCount) => {
     if (currentSemaphoreCount > recommendedSemaphoreCount) {
@@ -108,7 +110,7 @@ const updateSemaphores = async (currentSemaphoreCount, recommendedSemaphoreCount
     } else {
         await increaseSemaphores(recommendedSemaphoreCount - currentSemaphoreCount);
     }
-}
+};
 
 export const adjustSemaphoreCount = async () => {
     const [currentSemaphores, capacity] = await BbPromise.all([querySemaphores(), queryTableCapacity()]);
@@ -120,4 +122,4 @@ export const adjustSemaphoreCount = async () => {
     }
 
     return;
-}
+};

@@ -7,7 +7,13 @@ import {  LeaderboardRecord } from '../model';
 const tableName = process.env.LEADERBOARD_TABLE || 'Unknown';
 const indexName = process.env.SCORES_BY_DATED_SCORE_BLOCK_INDEX || 'Unknown';
 
-const docClient = new AWS.DynamoDB.DocumentClient();
+const DynamoDBService = new AWS.DynamoDB({ 
+    httpOptions: {
+        timeout: 2000, // 120000 - default timeout
+    },
+})
+
+const docClient = new AWS.DynamoDB.DocumentClient({ service: DynamoDBService });
 
 // Gets _ALL_ the scores that belong a to a user
 export const getUserScore = async (userId: string, datedScore: string) => {

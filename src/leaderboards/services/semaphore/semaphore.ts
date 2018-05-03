@@ -1,5 +1,6 @@
 import * as _ from 'lodash';
 import * as AWS from 'aws-sdk';
+import * as BbPromise from 'bluebird';
 
 const docClient = new AWS.DynamoDB.DocumentClient();
 
@@ -55,18 +56,20 @@ const attemptTakeSemaphore = async semaphore => {
             semaphore_key: semaphore.semaphore_key,
             semaphore_sort_key: semaphore.semaphore_sort_key,
         },
+        // NOTE: I think this logic is wrong
         ConditionExpression: `
             attribute_exists(semaphore_key) AND
             attribute_exists(semaphore_sort_key) AND
-            (attribute_not_exists(expires) OR :currentTime > #expires)
-        `,
+            (#expires = :null)
+        `, // OR :currentTime > #expires)
         UpdateExpression: 'set #expires = :expires',
         ExpressionAttributeNames: {
             '#expires': 'expires',
         },
         ExpressionAttributeValues: {
             ':expires': now + LEASE_DURATION,
-            ':currentTime': now
+            // ':currentTime': now,
+            ':null': null,
         },
         ReturnValues: 'ALL_NEW'
     };
@@ -81,8 +84,14 @@ const attemptTakeSemaphore = async semaphore => {
             .update(params)
             .promise();
 
-        return Object.assign({}, semaphore, updateResult.Attributes);
+        const acquiredSemaphore = Object.assign({}, semaphore, updateResult.Attributes);
+
+        console.log('Successfully Accquired Semaphore', console.log(JSON.stringify({ acquiredSemaphore }, null, 2)));
+
+        return acquiredSemaphore
     } catch (err) {
+        console.error('Error Acquiring Semaphore: ', err);
+
         return null;
     }
 };
@@ -146,6 +155,16 @@ const querySemaphores = async () => {
 
     return (readResult.Items || []) as Semaphore[];
 };
+
+export const countFreeSemaphores = async () => {
+    const allSemaphores = await querySemaphores();
+
+    const availableSemaphores = _.filter(
+        allSemaphores, semaphore => Date.now() > (semaphore.expires || 0)
+    );
+
+    return availableSemaphores.length;
+}
 
 export const obtainSemaphore = () => {
     return BbPromise.resolve(tryObtain())
