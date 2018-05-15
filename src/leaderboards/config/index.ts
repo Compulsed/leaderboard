@@ -12,7 +12,7 @@ export const supportedIntervals = [
 
 // 2 -- 60 - 100 w/s
 // 4 -- 90 - 100 w/s
-export const PIPELINE_UPDATE_CONCURRENCY = 8;
+export const PIPELINE_UPDATE_CONCURRENCY = 4;
 
 export const LAMBDA_CHUNCK_SIZE = 250; // Should take roughly 1.5 seconds
 

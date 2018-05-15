@@ -9,7 +9,7 @@ provider:
   iamRoleStatements:
     - Effect: Allow
       Action:
-        - sqs:ReceiveMessage
+        - sqs:*
       Resource:
         - arn:aws:sqs:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:scoreQueue.fifo*
     - Effect: Allow

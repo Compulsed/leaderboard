@@ -8,7 +8,7 @@ const DynamoDB = new AWS.DynamoDB();
 
 import { Semaphore, semaphoreKey, semaphoreTableName, leaderboardTableName } from './semaphore-model';
 
-const WORKER_WRITE_SPEED = 150;
+const WORKER_WRITE_SPEED = 100;
 
 const querySemaphores = async () => {
     const params = {

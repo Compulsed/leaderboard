@@ -3,6 +3,7 @@ import 'source-map-support/register'
 import * as BbPromise from 'bluebird';
 import * as _ from 'lodash';
 import * as AWS from 'aws-sdk';
+import * as uuidv4 from 'uuid/v4';
 
 import { obtainSemaphore, countFreeSemaphores } from './leaderboards/services/semaphore/semaphore';
 import { InputScoreUpdate, ScoreUpdate, LeaderboardRecord } from './leaderboards/model';
@@ -12,6 +13,8 @@ import { getScoreString, getDatedScoreBlockByScore } from './leaderboards/util';
 import { retryPutUserScore, retryGetUserScore } from './leaderboards/repository/write-leaderboard';
 
 const queueUrl = 'https://sqs.us-east-1.amazonaws.com/145722906259/scoreQueue.fifo';
+
+const processingTimeInMilliseconds = 60 * 1000;
 
 const invokeNext = () => {
     const lambda = new AWS.Lambda();
@@ -54,10 +57,18 @@ const getMessages = async (size) => {
         .receiveMessage(sqsDequeueParams)
         .promise();
 
+    console.log(`DequeueResponse: ${JSON.stringify(dequeueResponse, null, 2)}`)
+
+    return dequeueResponse.Messages || [];
+}
+
+const mapMessages = (sqsMessages: AWS.SQS.Message[]) => {
     const mappedMessages: InputScoreUpdate[] = _.map(
-        dequeueResponse.Messages || [],
+        sqsMessages,
         message => JSON.parse(message.Body || '{}') // TODO: handle missing body
     );
+
+    console.log(`MappedMessages: ${JSON.stringify(mappedMessages, null, 2)}`)
 
     return mappedMessages;
 }
@@ -148,6 +159,82 @@ const pipelineUpdates = (updateTasks: (() => Promise<LeaderboardRecord>)[]) => {
     );
 }
 
+
+const markCompleted = async (sqsMessages: AWS.SQS.Message[]) => {
+    const sqs = new AWS.SQS();
+
+    const entries = _.map(
+        sqsMessages,
+        message => 
+            ({
+                Id: uuidv4(),
+                ReceiptHandle: message.ReceiptHandle,
+            })
+    );
+
+    const sqsDeleteParams = {
+        QueueUrl: queueUrl,
+        Entries: entries,
+    };
+
+    const deleteResponse = await sqs
+        .deleteMessageBatch(sqsDeleteParams)
+        .promise();
+
+    console.log(JSON.stringify({ deleteResponse }, null, 2));
+
+    return;
+};
+
+const queryTableCapacity = async () => {
+    const DynamoDB = new AWS.DynamoDB();
+
+    const readResult = await DynamoDB
+        .describeTable({ TableName: leaderboardTableName })
+        .promise();
+
+    console.log(JSON.stringify({ readResult }, null, 2))
+        
+    const capacity = Math.min(
+        _.get(readResult, 'Table.ProvisionedThroughput.ReadCapacityUnits'),
+        _.get(readResult, 'Table.ProvisionedThroughput.WriteCapacityUnits')
+    );
+
+    return capacity;      
+};
+
+
+const filterUnprocessibleMessages = async (inputScoreUpdates) => {
+    const updatesAbleToBeProcessed = (await queryTableCapacity()) * (processingTimeInMilliseconds / 1000);
+
+    const messageWeighting = inputScoreUpdates.map(inputScoreUpdate => 
+        ({
+            inputScoreUpdate,
+            updateCount: explodeScoreUpdates([inputScoreUpdate]).length,
+        })
+    );
+
+    const orderedMessageWeighting = _.orderBy(
+        messageWeighting,
+        'updateCount'
+    );
+
+    let u = updatesAbleToBeProcessed;
+
+    return _.reduce(
+        messageWeighting, 
+        (acc, { inputScoreUpdate, updateCount }) => {
+            if ((u - updateCount) > 0) {
+                return [...acc, ...inputScoreUpdate];
+            } else {
+                return acc;
+            }
+        },
+        []
+    )
+}
+
+
 /*
     Problem:
         - What happens when I get messages which have really low write requirements?
@@ -162,7 +249,9 @@ export const handler = async (event, context, cb) => {
             console.log('-----------------------------------------------------------------')
             console.log('Getting Messages');
 
-            const inputScoreUpdate = await getMessages(10);
+            const sqsMessages = await getMessages(10);
+
+            const inputScoreUpdate = mapMessages(sqsMessages);
 
             console.log(`Fetched Messages: ${inputScoreUpdate.length}`);
 
@@ -171,9 +260,13 @@ export const handler = async (event, context, cb) => {
                 return false;
             }
 
+            const userIdsMessagesPerUserId = _.countBy(inputScoreUpdate, 'userId');
+
+            console.log('Messages Per UserId: ', JSON.stringify(userIdsMessagesPerUserId, null, 2));
+
             const explodedScoreUpdates = explodeScoreUpdates(inputScoreUpdate);
     
-            console.log(`Exploded Score Updates: ${explodedScoreUpdates.length}`);
+            console.log(`Exploded Score Updates: ${_.reduce(explodedScoreUpdates, (acc, scoreUpdates) => acc + scoreUpdates.length, 0)}`);
 
             const compressedScores = compressScores(explodedScoreUpdates);
     
@@ -183,13 +276,15 @@ export const handler = async (event, context, cb) => {
     
             console.log(`Generated Database Writes: ${scoreUpdates.length}`);
 
-            const result = await pipelineUpdates(scoreUpdates);    
+            const result = await pipelineUpdates(scoreUpdates);
+
+            // TODO: Only mark the messages which have actually been complete, completed
+            await markCompleted(sqsMessages);
 
             console.log(`Finished Database Writes: ${result.length}`);
             console.log('-----------------------------------------------------------------')
             console.log(`--- Writes p/s ${compressedScores.length / ((Date.now() - now) / 1000)} @ concurrency level: ${PIPELINE_UPDATE_CONCURRENCY}`)
             console.log('-----------------------------------------------------------------')
-
         }
 
         // We have successfully processed everything that we could and we ran out of time

@@ -18,7 +18,7 @@ const randomNumber = max =>
     Math.floor(Math.random() * max);
 
 const generateRecord = index => {
-    const key = String(randomNumber(500));
+    const key = String(randomNumber(100));
 
     const data: InputScoreUpdate = {
         userId: key,
