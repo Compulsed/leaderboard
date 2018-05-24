@@ -88,6 +88,15 @@ functions:
     events:
       - schedule: rate(1 minute)
 
+  dummyReaderWriter:
+    handler: src/dummy-reader-writer.handler
+    timeout: 300
+    memorySize: 256
+    environment:
+      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+    events:
+      - schedule: rate(1 minute)
+
   scoreWriterHandler:
     handler: src/score-writer.handler
     timeout: 300
@@ -117,8 +126,8 @@ resources:
       Properties:
         QueueName: scoreQueue.fifo
         FifoQueue: true
-        ContentBasedDeduplication: true
-
+        ContentBasedDeduplication: false
+        VisibilityTimeout: 300
     leaderboardTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: Delete

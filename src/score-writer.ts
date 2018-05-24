@@ -11,10 +11,21 @@ import { supportedIntervals, PIPELINE_UPDATE_CONCURRENCY } from './leaderboards/
 import facetFactoryMethod from './leaderboards/services/facet-factory-method';
 import { getScoreString, getDatedScoreBlockByScore } from './leaderboards/util';
 import { retryPutUserScore, retryGetUserScore } from './leaderboards/repository/write-leaderboard';
+import { leaderboardTableName, workerWriteSpeed, maxUpdateComplexity } from './leaderboards/services/semaphore/semaphore-model';
 
 const queueUrl = 'https://sqs.us-east-1.amazonaws.com/145722906259/scoreQueue.fifo';
 
-const processingTimeInMilliseconds = 60 * 1000;
+// TODO: Make sure processing time of lambda is about the same
+const processingTimeInMilliseconds = 120 * 1000;
+
+interface MessageWithScoreUpdate {
+    message: AWS.SQS.Message
+    scoreInputUpdate: InputScoreUpdate
+}
+
+interface MessageWithScoreUpdateAndComplexity extends MessageWithScoreUpdate {
+    updateComplexity: number
+}
 
 const invokeNext = () => {
     const lambda = new AWS.Lambda();
@@ -62,10 +73,13 @@ const getMessages = async (size) => {
     return dequeueResponse.Messages || [];
 }
 
-const mapMessages = (sqsMessages: AWS.SQS.Message[]) => {
-    const mappedMessages: InputScoreUpdate[] = _.map(
+const mapMessages = (sqsMessages: AWS.SQS.Message[]): MessageWithScoreUpdate[] => {
+    const mappedMessages = _.map(
         sqsMessages,
-        message => JSON.parse(message.Body || '{}') // TODO: handle missing body
+        message => ({
+            scoreInputUpdate: JSON.parse(message.Body || '{}') as InputScoreUpdate, 
+            message
+        })
     );
 
     console.log(`MappedMessages: ${JSON.stringify(mappedMessages, null, 2)}`)
@@ -105,7 +119,7 @@ const explodeScoreUpdates = (inputscoreUpdates: InputScoreUpdate[]) => {
     return inputscoreUpdates.map(exploreScoreUpdate)
 }
 
-const compressScores = (scoreUpdates: ScoreUpdate[][]) => {
+export const compressScores = (scoreUpdates: ScoreUpdate[][]) => {
     const flatScoreUpdates = _.flatten(scoreUpdates);
 
     const groupedScoreUpdates = _.groupBy(
@@ -178,7 +192,7 @@ const markCompleted = async (sqsMessages: AWS.SQS.Message[]) => {
     };
 
     const deleteResponse = await sqs
-        .deleteMessageBatch(sqsDeleteParams)
+        .deleteMessageBatch(sqsDeleteParams as any)
         .promise();
 
     console.log(JSON.stringify({ deleteResponse }, null, 2));
@@ -200,95 +214,166 @@ const queryTableCapacity = async () => {
         _.get(readResult, 'Table.ProvisionedThroughput.WriteCapacityUnits')
     );
 
-    return capacity;      
+    const numWriters = Math.ceil(capacity / workerWriteSpeed);
+
+    const availableWriteUnits = Math.floor(capacity / numWriters);
+
+    return availableWriteUnits;
 };
 
 
-const filterUnprocessibleMessages = async (inputScoreUpdates) => {
-    const updatesAbleToBeProcessed = (await queryTableCapacity()) * (processingTimeInMilliseconds / 1000);
+// What happens if we cannot process 
+const filterProcessibleMessages = async (inputScoreUpdates: MessageWithScoreUpdateAndComplexity[]) => {
+    const updateCapacity = (await queryTableCapacity()) * (processingTimeInMilliseconds / 1000);
 
-    const messageWeighting = inputScoreUpdates.map(inputScoreUpdate => 
-        ({
-            inputScoreUpdate,
-            updateCount: explodeScoreUpdates([inputScoreUpdate]).length,
-        })
+    console.log(JSON.stringify({ updateCapacity }));
+
+    // We process the messages with smaller complexity first
+    const orderedMessagesByUpdateWeighting = _.orderBy(
+        inputScoreUpdates,
+        'updateComplexity'
     );
 
-    const orderedMessageWeighting = _.orderBy(
-        messageWeighting,
-        'updateCount'
+    console.log(JSON.stringify({ orderedMessagesByUpdateWeighting }));
+
+    const { processibleInputScoreUpdate, defferedInputScoreUpdate, remainingUpdateCapacity } = _.reduce(
+        orderedMessagesByUpdateWeighting, 
+        ({ remainingUpdateCapacity, processibleInputScoreUpdate, defferedInputScoreUpdate }, messageWithScoreUpdateAndComplexity) => ({
+            defferedInputScoreUpdate: [
+                ...defferedInputScoreUpdate,
+                ...((messageWithScoreUpdateAndComplexity.updateComplexity > remainingUpdateCapacity) ? [messageWithScoreUpdateAndComplexity] : [])
+            ],
+            processibleInputScoreUpdate: [
+                ...processibleInputScoreUpdate,
+                ...((remainingUpdateCapacity > messageWithScoreUpdateAndComplexity.updateComplexity) ? [messageWithScoreUpdateAndComplexity] : [])
+            ],
+            remainingUpdateCapacity: remainingUpdateCapacity - (remainingUpdateCapacity > messageWithScoreUpdateAndComplexity.updateComplexity
+                ? messageWithScoreUpdateAndComplexity.updateComplexity
+                : 0
+            ),
+        }),
+        {
+            remainingUpdateCapacity: updateCapacity,
+            processibleInputScoreUpdate: ([] as MessageWithScoreUpdateAndComplexity[]),
+            defferedInputScoreUpdate: ([] as MessageWithScoreUpdateAndComplexity[])
+        }
     );
 
-    let u = updatesAbleToBeProcessed;
+    console.log(JSON.stringify({ processibleInputScoreUpdate, defferedInputScoreUpdate, remainingUpdateCapacity }));
 
-    return _.reduce(
-        messageWeighting, 
-        (acc, { inputScoreUpdate, updateCount }) => {
-            if ((u - updateCount) > 0) {
-                return [...acc, ...inputScoreUpdate];
-            } else {
-                return acc;
-            }
-        },
-        []
-    )
+    return { processibleInputScoreUpdate, defferedInputScoreUpdate };
 }
 
+const messageComplexity = (inputScoreUpdatesWithMessages: MessageWithScoreUpdate[]): MessageWithScoreUpdateAndComplexity[] => {
+    return inputScoreUpdatesWithMessages.map(inputScoreUpdateWithMessage => 
+        ({
+            ...inputScoreUpdateWithMessage,
+            updateComplexity: exploreScoreUpdate(inputScoreUpdateWithMessage.scoreInputUpdate).length,
+        })
+    );
+}
+
+const filterComplexMessages = (inputScoreUpdates: MessageWithScoreUpdateAndComplexity[]) => {
+    const [processableMessages, complexMessages] = _.partition(
+        inputScoreUpdates,
+        ({ updateComplexity }) => (maxUpdateComplexity > updateComplexity)
+    );
+
+    return { processableMessages, complexMessages };
+}
+
+// --
+
+const reduceMessages = async (sqsMessages: AWS.SQS.Message[]) => {
+    const inputScoreUpdatesWithMessages = _.flow([mapMessages, messageComplexity])(sqsMessages);
+
+    const { processableMessages, complexMessages } = filterComplexMessages(inputScoreUpdatesWithMessages);
+
+    console.log(
+        `Processible Messages: ${JSON.stringify({ length: processableMessages.length, processableMessages })}`,
+        `Complex Messages: ${JSON.stringify({ length: complexMessages.length, complexMessages })}`
+    );
+
+    // Delete the messages we cannot process because they are too complex
+    if (complexMessages.length) {
+        await markCompleted(_.map(complexMessages, 'message'));
+    }
+
+    const { processibleInputScoreUpdate, defferedInputScoreUpdate } = await filterProcessibleMessages(processableMessages);
+
+    console.log(`Processible Messages: ${processibleInputScoreUpdate.length}, Deffered Messages: ${defferedInputScoreUpdate.length}`);
+
+    return processibleInputScoreUpdate;
+}
+
+const processMessages = async (processibleInputScoreUpdate: MessageWithScoreUpdateAndComplexity[]) => {
+    const inputScoreUpdates = _.map(processibleInputScoreUpdate, 'scoreInputUpdate') as InputScoreUpdate[];
+
+    const userIdsMessagesPerUserId = _.countBy(inputScoreUpdates, 'userId');
+
+    console.log('Messages Per UserId: ', JSON.stringify(userIdsMessagesPerUserId, null, 2));
+
+    const explodedScoreUpdates = explodeScoreUpdates(inputScoreUpdates);
+
+    console.log(`Exploded Score Updates: ${_.reduce(explodedScoreUpdates, (acc, scoreUpdates) => acc + scoreUpdates.length, 0)}`);
+
+    const compressedScores = compressScores(explodedScoreUpdates);
+
+    console.log(`Compressed Score Updates: ${compressedScores.length}`);
+
+    const scoreUpdates = buildUpdates(compressedScores);
+
+    console.log(`Generated Database Writes: ${scoreUpdates.length}`);
+
+    const result = await pipelineUpdates(scoreUpdates);
+
+    // TODO: Only mark the messages which have actually been complete, completed
+    if (processibleInputScoreUpdate.length) {
+        await markCompleted(_.map(processibleInputScoreUpdate, 'message'));
+    }
+
+    return result;
+}
 
 /*
     Problem:
         - What happens when I get messages which have really low write requirements?
             -> Might spend a lot of time polling the queue, and little time writting
-        - Need to make the messages as successful
+        - How 
 */
 export const handler = async (event, context, cb) => {
     return BbPromise.using(obtainSemaphore(), async () => {
-        while (context.getRemainingTimeInMillis() > 240 * 1000) {
-            const now = Date.now()
+        try {
+            while (context.getRemainingTimeInMillis() > 240 * 1000) {
+                const now = Date.now()
 
-            console.log('-----------------------------------------------------------------')
-            console.log('Getting Messages');
+                console.log('-----------------------------------------------------------------')
+                console.log('Getting Messages');
 
-            const sqsMessages = await getMessages(10);
+                const sqsMessages = await getMessages(10);
 
-            const inputScoreUpdate = mapMessages(sqsMessages);
+                console.log(`Fetched Messages: ${sqsMessages.length}`);
 
-            console.log(`Fetched Messages: ${inputScoreUpdate.length}`);
+                // We got not more messages, let's not invoke more workers
+                if (sqsMessages.length === 0) {
+                    return false;
+                }
 
-            // We got not more messages, let's not invoke more workers
-            if (inputScoreUpdate.length === 0) {
-                return false;
+                const processableMessages = await reduceMessages(sqsMessages);
+
+                const result = await processMessages(processableMessages);
+
+                console.log(`Finished Database Writes: ${result.length}`);
+                console.log('-----------------------------------------------------------------')
+                console.log(`--- Writes p/s ${result.length / ((Date.now() - now) / 1000)} @ concurrency level: ${PIPELINE_UPDATE_CONCURRENCY}`)
+                console.log('-----------------------------------------------------------------')
             }
 
-            const userIdsMessagesPerUserId = _.countBy(inputScoreUpdate, 'userId');
-
-            console.log('Messages Per UserId: ', JSON.stringify(userIdsMessagesPerUserId, null, 2));
-
-            const explodedScoreUpdates = explodeScoreUpdates(inputScoreUpdate);
-    
-            console.log(`Exploded Score Updates: ${_.reduce(explodedScoreUpdates, (acc, scoreUpdates) => acc + scoreUpdates.length, 0)}`);
-
-            const compressedScores = compressScores(explodedScoreUpdates);
-    
-            console.log(`Compressed Score Updates: ${compressedScores.length}`);
-
-            const scoreUpdates = buildUpdates(compressedScores);
-    
-            console.log(`Generated Database Writes: ${scoreUpdates.length}`);
-
-            const result = await pipelineUpdates(scoreUpdates);
-
-            // TODO: Only mark the messages which have actually been complete, completed
-            await markCompleted(sqsMessages);
-
-            console.log(`Finished Database Writes: ${result.length}`);
-            console.log('-----------------------------------------------------------------')
-            console.log(`--- Writes p/s ${compressedScores.length / ((Date.now() - now) / 1000)} @ concurrency level: ${PIPELINE_UPDATE_CONCURRENCY}`)
-            console.log('-----------------------------------------------------------------')
+            // We have successfully processed everything that we could and we ran out of time
+            return true;
+        } catch (err) {
+            return console.error(err.message, err.stack) || false;
         }
-
-        // We have successfully processed everything that we could and we ran out of time
-        return true;
     })
     .then(moreWorkers => moreWorkers
         ? (console.log('Probably more worker, invoking more workers') || invokeMoreWorkers())

@@ -8,3 +8,7 @@ export const semaphoreTableName = process.env.SEMAPHORE_TABLE || 'Unknown';
 export const leaderboardTableName = process.env.LEADERBOARD_TABLE || 'Unknown';
 
 export const semaphoreKey = 'semaphore';
+
+export const workerWriteSpeed = 100;
+
+export const maxUpdateComplexity = 500;

@@ -6,9 +6,7 @@ import * as BbPromise from 'bluebird';
 const docClient = new AWS.DynamoDB.DocumentClient();
 const DynamoDB = new AWS.DynamoDB();
 
-import { Semaphore, semaphoreKey, semaphoreTableName, leaderboardTableName } from './semaphore-model';
-
-const WORKER_WRITE_SPEED = 100;
+import { Semaphore, semaphoreKey, semaphoreTableName, workerWriteSpeed, leaderboardTableName } from './semaphore-model';
 
 const querySemaphores = async () => {
     const params = {
@@ -115,7 +113,7 @@ const updateSemaphores = async (currentSemaphoreCount, recommendedSemaphoreCount
 export const adjustSemaphoreCount = async () => {
     const [currentSemaphores, capacity] = await BbPromise.all([querySemaphores(), queryTableCapacity()]);
 
-    const recommendedSemaphoreCount = Math.ceil(capacity / WORKER_WRITE_SPEED);
+    const recommendedSemaphoreCount = Math.ceil(capacity / workerWriteSpeed);
 
     if (currentSemaphores.length !== recommendedSemaphoreCount) {
         await updateSemaphores(currentSemaphores.length, recommendedSemaphoreCount);
