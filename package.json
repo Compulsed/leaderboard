@@ -12,6 +12,7 @@
   "dependencies": {
     "@types/jest": "^22.2.3",
     "bluebird": "^3.5.0",
+    "dataloader": "^1.4.0",
     "jest": "^22.4.4",
     "lodash": "^4.17.4",
     "moment": "^2.20.1",

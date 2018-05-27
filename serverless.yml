@@ -22,6 +22,7 @@ provider:
         - dynamodb:BatchWriteItem
         - dynamodb:DeleteItem
         - dynamodb:DescribeTable
+        - dynamodb:BatchGetItem
       Resource:
         - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.leaderboardTable.baseTable}*
         - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.lockTable.baseTable}*
@@ -126,7 +127,7 @@ resources:
       Properties:
         QueueName: scoreQueue.fifo
         FifoQueue: true
-        ContentBasedDeduplication: false
+        ContentBasedDeduplication: true
         VisibilityTimeout: 300
     leaderboardTable:
       Type: AWS::DynamoDB::Table
@@ -149,8 +150,8 @@ resources:
           - AttributeName: datedScore
             KeyType: RANGE
         ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
+          ReadCapacityUnits: 500
+          WriteCapacityUnits: 500
         # GlobalSecondaryIndexes:
         #   # Allows us to lookup top scores in a block
         #   - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
@@ -171,8 +172,8 @@ resources:
       Properties:
         TableName: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
         ProvisionedThroughput:
-          ReadCapacityUnits: 2
-          WriteCapacityUnits: 2
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
         AttributeDefinitions:
           - AttributeName: semaphore_key
             AttributeType: S

@@ -11,7 +11,7 @@ const sqs = new AWS.SQS();
 
 const queueUrl = 'https://sqs.us-east-1.amazonaws.com/145722906259/scoreQueue.fifo';
 
-const noRecords = 5
+const noRecords = 10
 const noRecordSets = 300
 
 const randomNumber = max =>

@@ -1,5 +1,8 @@
 import * as AWS from 'aws-sdk';
 import * as promiseRetry from 'promise-retry';
+import * as _ from 'lodash';
+import * as DataLoader from 'dataloader';
+import * as BbPromise from 'bluebird';
 
 import { LeaderboardRecord } from '../model';
 
@@ -13,6 +16,108 @@ const DynamoDBService = new AWS.DynamoDB({
 })
 
 const docClient = new AWS.DynamoDB.DocumentClient({ service: DynamoDBService });
+
+const batchWrite = async (leaderboardRecords: LeaderboardRecord[]) => {
+    let unprocessedRecords = _.map(leaderboardRecords, leaderboardRecord =>
+        ({
+            PutRequest: {
+                Item: leaderboardRecord,
+            },
+        })
+    );
+
+    while (unprocessedRecords.length) {
+        const params = {
+            RequestItems: { [tableName]: unprocessedRecords },
+        };
+    
+        try {
+            const response = await docClient
+                .batchWrite(params)
+                .promise();
+
+            unprocessedRecords = (response.UnprocessedItems || []) as typeof unprocessedRecords;
+        } catch (err) {
+            if (err.code !== 'ProvisionedThroughputExceededException') {                
+                throw err;
+            }
+        }
+            
+        // If there was unprocessed records, let's backoff
+        if (unprocessedRecords.length) {
+            await BbPromise.delay(1000);
+        }
+    }
+
+    return _.times(leaderboardRecords.length, _.constant(null));
+};
+
+const batchRead = async (leaderboardRecords: { userId: string, datedScore: string }[]) => {
+    let readRequests = _.map(leaderboardRecords, leaderboardRecord =>
+        ({
+            userId: leaderboardRecord.userId,
+            datedScore: leaderboardRecord.datedScore
+        })
+    );
+
+    let results: LeaderboardRecord[] = [];
+
+    while (readRequests.length) {
+        const params = {
+            RequestItems: { 
+                [tableName]: {
+                    Keys: readRequests,
+                },
+            },
+        };
+    
+        try {
+            const response = await docClient
+                .batchGet(params)
+                .promise();
+
+            readRequests = (response.UnprocessedKeys || []) as typeof readRequests;
+            results = [...results, ...((response.Responses || []) as LeaderboardRecord[])];
+        } catch (err) {
+            if (err.code !== 'ProvisionedThroughputExceededException') {                
+                throw err;
+            }
+        }
+            
+        // If there was unprocessed records, let's backoff
+        if (readRequests.length) {
+            await BbPromise.delay(1000);
+        }
+    }
+
+    const resultsByIndex = _.keyBy(
+        results,
+        ({userId, datedScore}) => `${userId}-${datedScore}`
+    );
+
+    return _.map(
+        leaderboardRecords,
+        ({userId, datedScore}) => resultsByIndex[`${userId}-${datedScore}`] || null
+    );
+};
+
+const writeLoader = new DataLoader(
+    batchWrite,
+    { cache: false, maxBatchSize: 25 }
+);
+
+const readLoader = new DataLoader(
+    batchRead,
+    { cache: false, maxBatchSize: 25 }
+);
+
+export const retryPutUserScore = (leaderboardRecord: LeaderboardRecord) => {
+    return writeLoader.load(leaderboardRecord);
+};
+
+export const getUserScore = (userId: string, datedScore: string) => {
+    return readLoader.load({ userId, datedScore });
+};
 
 const promiseRetryOptions = {
     randomize: true, 
@@ -30,9 +135,9 @@ const putUserScore = (leaderboardRecord: LeaderboardRecord) => {
      return docClient
         .put(putParams)
         .promise()
-}
+};
 
-export const retryPutUserScore = (leaderboardRecord: LeaderboardRecord) => {
+export const retryPutUserScoreSingle = (leaderboardRecord: LeaderboardRecord) => {
     return promiseRetry(async (retry, number) => {
         return putUserScore(leaderboardRecord).catch(err => {
             if (err.code === 'ProvisionedThroughputExceededException') {                
@@ -44,7 +149,8 @@ export const retryPutUserScore = (leaderboardRecord: LeaderboardRecord) => {
     }, promiseRetryOptions);
 }
 
-const getUserScore = async (userId: string, datedScore: string) => {
+
+const getUserScoreSingle = async (userId: string, datedScore: string) => {
     const params = {
         TableName: tableName,
         Key: { userId, datedScore },
