@@ -46,11 +46,17 @@ const invokeMoreWorkers = async () => {
     const freeSemaphoreCount = await countFreeSemaphores();
 
     if (freeSemaphoreCount) {
-        console.log(`Invoking ${freeSemaphoreCount} more workers`);
+        console.log(`Free semaphore count: ${freeSemaphoreCount}`);
 
-        await BbPromise.all(_.times(freeSemaphoreCount, invokeNext));
+        // Do not invoke more than 5 workers, trade off between slow rampup & invocation spikes
+        //  due to read/write concurrency
+        var invokeForNWorkers = _.clamp(freeSemaphoreCount, 1, 5);
 
-        console.log(`Finished invoking ${freeSemaphoreCount} more workers`);
+        console.log(`Invoking ${invokeForNWorkers} more workers`);
+
+        await BbPromise.all(_.times(invokeForNWorkers, invokeNext));
+
+        console.log(`Finished invoking ${invokeForNWorkers} more workers`);
     }
 
     return;
@@ -376,7 +382,7 @@ export const handler = async (event, context, cb) => {
         }
     })
     .then(moreWorkers => moreWorkers
-        ? (console.log('Probably more worker, invoking more workers') || invokeMoreWorkers())
+        ? (console.log('Probably more workers, invoking more workers') || invokeMoreWorkers())
         : console.log('Finished processing, not invoking any more workers')
     )
     .finally(() => console.log('Finished') || cb(undefined))

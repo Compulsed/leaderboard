@@ -7,7 +7,7 @@ const docClient = new AWS.DynamoDB.DocumentClient();
 import { Semaphore, semaphoreKey, semaphoreTableName } from './semaphore-model';
 
 const LEASE_DURATION = 60 * 1000 // 60 seconds
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 1;
 
 const tryObtain = async (attemptNumber = 0) => {
     if (attemptNumber === MAX_ATTEMPTS) {

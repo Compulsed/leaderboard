@@ -95,6 +95,7 @@ functions:
     memorySize: 256
     environment:
       LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+      SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
     events:
       - schedule: rate(1 minute)
 
@@ -139,10 +140,10 @@ resources:
             AttributeType: S # eg. <uuid>
           - AttributeName: datedScore
             AttributeType: S # eg. month_2017/09
-          # - AttributeName: datedScoreBlock
-          #   AttributeType: S # eg. month_2017/09_1
-          # - AttributeName: score
-          #   AttributeType: N # eg. 10
+          - AttributeName: datedScoreBlock
+            AttributeType: S # eg. month_2017/09_1
+          - AttributeName: score
+            AttributeType: N # eg. 10
         KeySchema:
           # Allows us to fetch a scores by a specific userId
           - AttributeName: userId
@@ -150,21 +151,21 @@ resources:
           - AttributeName: datedScore
             KeyType: RANGE
         ProvisionedThroughput:
-          ReadCapacityUnits: 500
-          WriteCapacityUnits: 500
-        # GlobalSecondaryIndexes:
-        #   # Allows us to lookup top scores in a block
-        #   - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
-        #     KeySchema:,
-        #      - AttributeName: datedScoreBlock
-        #        KeyType: HASH
-        #      - AttributeName: score
-        #        KeyType: RANGE
-        #     Projection:
-        #       ProjectionType: ALL
-        #     ProvisionedThroughput:
-        #       ReadCapacityUnits: 5
-        #       WriteCapacityUnits: 5
+          ReadCapacityUnits: 10
+          WriteCapacityUnits: 10
+        GlobalSecondaryIndexes:
+          # Allows us to lookup top scores in a block
+          - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
+            KeySchema:
+             - AttributeName: datedScoreBlock
+               KeyType: HASH
+             - AttributeName: score
+               KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 10
+              WriteCapacityUnits: 10
 
     semaphoreTable:
       Type: AWS::DynamoDB::Table
@@ -172,8 +173,8 @@ resources:
       Properties:
         TableName: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
         ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 2
         AttributeDefinitions:
           - AttributeName: semaphore_key
             AttributeType: S

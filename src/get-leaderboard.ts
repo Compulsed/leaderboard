@@ -16,12 +16,19 @@ export const handler = async (event: any, context: Context, cb: Callback) => {
     console.log('event', JSON.stringify({ event }, null, 2));
 
     try {
-        const inputScoreFacets = _.get(event, 'queryStringParameters', {});
+        const queryString = _.get(event, 'queryStringParameters', {});
+        
+        const inputScoreFacets = _.omit(
+            queryString,
+            ['timeInterval', 'date', 'records']
+        );
 
-        const timeInterval = 'day';
-        const date = Date.now();
-
-        const scores = await getScores(timeInterval, date, inputScoreFacets, 50);
+        const scores = await getScores(
+            queryString.timeInterval || 'day',
+            queryString.date || Date.now(),
+            inputScoreFacets,
+            queryString.records || 50
+        );
 
         const scoresWithPosition = scores
             .map((score, index) => Object.assign({}, score, { index }))
