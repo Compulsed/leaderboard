@@ -10,40 +10,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@types/jest": "^22.2.3",
     "bluebird": "^3.5.0",
-    "dataloader": "^1.4.0",
-    "jest": "^22.4.4",
-    "lodash": "^4.17.4",
-    "moment": "^2.20.1",
-    "promise-retry": "^1.1.1",
-    "single-line-log": "^1.1.2",
-    "source-map-support": "^0.4.17",
-    "ts-jest": "^22.4.6",
+    "lodash": "^4.17.11",
     "uuid": "^3.2.1"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^0.0.16",
-    "@types/bluebird": "^3.5.11",
-    "@types/lodash": "^4.14.74",
-    "@types/node": "^8.0.28",
-    "aws-sdk": "^2.108.0",
-    "serverless": "^1.26.0",
-    "serverless-plugin-typescript": "^1.1.2",
-    "ts-node": "^5.0.1"
-  },
-  "jest": {
-    "transform": {
-      "^.+\\.tsx?$": "ts-jest"
-    },
-    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
-    "moduleFileExtensions": [
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "json",
-      "node"
-    ]
+    "aws-sdk": "^2.463.0",
+    "serverless": "^1.26.0"
   }
 }

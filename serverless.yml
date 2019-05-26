@@ -1,11 +1,28 @@
 service: fifo-leaderboard
-
 frameworkVersion: ">=1.8.0 <2.0.0"
 
 provider:
   name: aws
-  runtime: nodejs6.10
+  runtime: nodejs10.x
   versionFunctions: false
+  environment:
+    # AWS Resources
+    LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+    SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
+    QUEUE_URL: ${self:custom.sqs.queueURL}
+    SELF_FUNCTION: ${self:service}-${opt:stage}-scoreWriterHandler
+   
+    # Event Validation
+    MAX_UPDATE_COMPLEXITY:  500
+    
+    # How many semaphores to create
+    WORKER_WRITE_SPEED: 100
+    
+    # Semaphore Specific
+    SEMAPHORE_KEY: 'semaphore'
+    LEASE_DURATION: 300000 # 5 minutes -- functions cannot run loader than this
+    MAX_ATTEMPTS: 1
+
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -25,16 +42,12 @@ provider:
         - dynamodb:BatchGetItem
       Resource:
         - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.leaderboardTable.baseTable}*
-        - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.lockTable.baseTable}*
         - arn:aws:dynamodb:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:table/${self:custom.dynamodb.tables.semaphoreTable.baseTable}*
     - Effect: Allow
       Action:
         - lambda:InvokeFunction
       Resource:
         - arn:aws:lambda:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:function:*
-
-plugins:
-  - serverless-plugin-typescript
 
 package:
   include:
@@ -57,69 +70,31 @@ package:
     - src/__mocks__/**
 
 custom:
-  kinesis:
-    streams:
-      scoreStream: ${self:service}-${opt:stage}-scoreStream
+  sqs:
+    queueURL: https://sqs.${env:AWS_REGION}.amazonaws.com/${env:AWS_ACCOUNT_ID}/scoreQueue.fifo
   dynamodb:
     tables:
       semaphoreTable:
         baseTable: ${self:service}-${opt:stage}-semaphoreTable
-      lockTable:
-        baseTable: ${self:service}-${opt:stage}-lockTable
       leaderboardTable:
         baseTable: ${self:service}-${opt:stage}-leaderboardTable
         gsi:
           scoresByDatedScoreBlock: ${self:service}-${opt:stage}-leaderboardTable-scoresByDatedScoreBlock
 
 functions:
-  # Methods
-  testFunction:
-    handler: src/test-fn.handler
-    environment:
-      SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
-      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
-
   semaphoreHandler:
-    handler: src/semaphore-processor.handler
-    timeout: 300
+    handler: src/handlers/semaphore-processor.handler
+    timeout: 30
     memorySize: 256
-    environment:
-      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
-      SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
-    events:
-      - schedule: rate(1 minute)
-
-  dummyReaderWriter:
-    handler: src/dummy-reader-writer.handler
-    timeout: 300
-    memorySize: 256
-    environment:
-      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
-      SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
     events:
       - schedule: rate(1 minute)
 
   scoreWriterHandler:
     handler: src/score-writer.handler
     timeout: 300
-    memorySize: 1536
-    environment:
-      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
-      SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
-      SELF_FUNCTION: ${self:service}-${opt:stage}-scoreWriterHandler
+    memorySize: 1024
     events:
-      - schedule: rate(1 minute)      
-
-  getLeaderboard:
-    handler: src/get-leaderboard.handler
-    environment:
-      SCORES_BY_DATED_SCORE_BLOCK_INDEX: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
-      LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}  
-    events:
-      - http:
-          path: leaderboard
-          method: get
-          cors: true
+      - schedule: rate(1 minute)
 
 resources:
   Resources:
