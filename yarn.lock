@@ -1623,7 +1623,7 @@ semver@^5.0.3, semver@^5.1.0, semver@^5.7.0:
   version "5.7.0"
   resolved "https://registry.yarnpkg.com/semver/-/semver-5.7.0.tgz#790a7cf6fea5459bac96110b29b60412dc8ff96b"
 
-serverless@^1.26.0:
+serverless@^1.43.0:
   version "1.43.0"
   resolved "https://registry.yarnpkg.com/serverless/-/serverless-1.43.0.tgz#4677e7b33f00c2e943018562868d6ba9cc4a52fa"
   dependencies:

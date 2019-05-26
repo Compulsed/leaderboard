@@ -10,13 +10,10 @@ provider:
     LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
     SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
     QUEUE_URL: ${self:custom.sqs.queueURL}
-    SELF_FUNCTION: ${self:service}-${opt:stage}-scoreWriterHandler
-   
-    # Event Validation
-    MAX_UPDATE_COMPLEXITY:  500
-    
+    SELF_FUNCTION: ${self:service}-${opt:stage}-scoreQueueReader
+       
     # How many semaphores to create
-    WORKER_WRITE_SPEED: 100
+    WORKER_WRITE_SPEED: 800
     
     # Semaphore Specific
     SEMAPHORE_KEY: 'semaphore'
@@ -87,14 +84,19 @@ functions:
     timeout: 30
     memorySize: 256
     events:
-      - schedule: rate(1 minute)
+      - schedule: rate(1 minute) # Kicks off workers if all have gone to sleep
 
-  scoreWriterHandler:
-    handler: src/score-writer.handler
+  scoreQueueReader:
+    handler: src/handlers/score-queue-reader.handler
     timeout: 300
     memorySize: 1024
     events:
-      - schedule: rate(1 minute)
+      - schedule: rate(1 minute) # Periodically update semaphore count
+
+  # Designed to put dummy scores into queue for teating purposes
+  scoreQueueWriter:
+    handler: src/handlers/score-queue-writer.handler
+
 
 resources:
   Resources:
@@ -126,8 +128,8 @@ resources:
           - AttributeName: datedScore
             KeyType: RANGE
         ProvisionedThroughput:
-          ReadCapacityUnits: 10
-          WriteCapacityUnits: 10
+          ReadCapacityUnits: 2000
+          WriteCapacityUnits: 2000
         GlobalSecondaryIndexes:
           # Allows us to lookup top scores in a block
           - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
@@ -140,7 +142,7 @@ resources:
               ProjectionType: ALL
             ProvisionedThroughput:
               ReadCapacityUnits: 10
-              WriteCapacityUnits: 10
+              WriteCapacityUnits: 2000
 
     semaphoreTable:
       Type: AWS::DynamoDB::Table
