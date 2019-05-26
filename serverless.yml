@@ -7,17 +7,21 @@ provider:
   versionFunctions: false
   environment:
     # AWS Resources
-    LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
     SEMAPHORE_TABLE: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
+    LEADERBOARD_TABLE: ${self:custom.dynamodb.tables.leaderboardTable.baseTable}
+    LEADERBOARD_SCORES_BY_BLOCK_GSI: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByLeaderboardBlock}
     QUEUE_URL: ${self:custom.sqs.queueURL}
     SELF_FUNCTION: ${self:service}-${opt:stage}-scoreQueueReader
        
-    # How many semaphores to create
-    WORKER_WRITE_SPEED: 800
+    # Determines semaphore count
+    #   Calculated knowing that
+    #     - 1GB Lambda maxes out at ~600 Read + Write ops / s
+    #     - Latency to DDB is ~ 6-8ms
+    WORKER_WRITE_SPEED: 700
     
     # Semaphore Specific
     SEMAPHORE_KEY: 'semaphore'
-    LEASE_DURATION: 300000 # 5 minutes -- functions cannot run loader than this
+    LEASE_DURATION: 300000 # 5 minutes -- functions cannot run longer than this
     MAX_ATTEMPTS: 1
 
   iamRoleStatements:
@@ -76,7 +80,7 @@ custom:
       leaderboardTable:
         baseTable: ${self:service}-${opt:stage}-leaderboardTable
         gsi:
-          scoresByDatedScoreBlock: ${self:service}-${opt:stage}-leaderboardTable-scoresByDatedScoreBlock
+          scoresByLeaderboardBlock: ${self:service}-${opt:stage}-leaderboardTable-scoresByLeaderboardBlock
 
 functions:
   semaphoreHandler:
@@ -96,6 +100,7 @@ functions:
   # Designed to put dummy scores into queue for teating purposes
   scoreQueueWriter:
     handler: src/handlers/score-queue-writer.handler
+    timeout: 30
 
 
 resources:
@@ -115,9 +120,9 @@ resources:
         AttributeDefinitions:
           - AttributeName: userId
             AttributeType: S # eg. <uuid>
-          - AttributeName: datedScore
+          - AttributeName: leaderboard
             AttributeType: S # eg. month_2017/09
-          - AttributeName: datedScoreBlock
+          - AttributeName: leaderboardBlock
             AttributeType: S # eg. month_2017/09_1
           - AttributeName: score
             AttributeType: N # eg. 10
@@ -125,16 +130,16 @@ resources:
           # Allows us to fetch a scores by a specific userId
           - AttributeName: userId
             KeyType: HASH
-          - AttributeName: datedScore
+          - AttributeName: leaderboard
             KeyType: RANGE
         ProvisionedThroughput:
           ReadCapacityUnits: 2000
           WriteCapacityUnits: 2000
         GlobalSecondaryIndexes:
           # Allows us to lookup top scores in a block
-          - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByDatedScoreBlock}
+          - IndexName: ${self:custom.dynamodb.tables.leaderboardTable.gsi.scoresByLeaderboardBlock}
             KeySchema:
-             - AttributeName: datedScoreBlock
+             - AttributeName: leaderboardBlock
                KeyType: HASH
              - AttributeName: score
                KeyType: RANGE
@@ -149,9 +154,6 @@ resources:
       DeletionPolicy: Delete
       Properties:
         TableName: ${self:custom.dynamodb.tables.semaphoreTable.baseTable}
-        ProvisionedThroughput:
-          ReadCapacityUnits: 2
-          WriteCapacityUnits: 2
         AttributeDefinitions:
           - AttributeName: semaphore_key
             AttributeType: S
@@ -164,4 +166,5 @@ resources:
             KeyType: RANGE
         TimeToLiveSpecification:
           AttributeName: 'expires'
-          Enabled: true          
+          Enabled: true
+        BillingMode: PAY_PER_REQUEST
