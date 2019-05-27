@@ -9,7 +9,6 @@ const QUEUE_URL = process.env.QUEUE_URL;
 
 // Total Items = 10 * 1000
 const noRecords = 10;
-const noRecordSets = 1000;
 
 const randomNumber = max =>
     Math.floor(Math.random() * max);
@@ -52,12 +51,14 @@ const putRecords = async () => {
 };
 
 const handler = async (event, context, cb) => {
-    console.log('In handler!');
+    const noRecordSets = Math.floor((event.records / 10)) || 1000;
+
+    console.log('In handler!', JSON.stringify({ event }));
 
     await BbPromise.map(
         _.times(noRecordSets),
         putRecords,
-        { concurrency: 1 },
+        { concurrency: 10 },
     );
 
     cb(undefined, { message: 'In Message returned of Lambda'});

@@ -17,7 +17,7 @@ provider:
     #   Calculated knowing that
     #     - 1GB Lambda maxes out at ~600 Read + Write ops / s
     #     - Latency to DDB is ~ 6-8ms
-    WORKER_WRITE_SPEED: 700
+    WORKER_WRITE_SPEED: 500
     
     # Semaphore Specific
     SEMAPHORE_KEY: 'semaphore'
@@ -100,7 +100,7 @@ functions:
   # Designed to put dummy scores into queue for teating purposes
   scoreQueueWriter:
     handler: src/handlers/score-queue-writer.handler
-    timeout: 30
+    timeout: 300
 
 
 resources:
